@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block titulo %}Início | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<div class="p-4 p-md-5 bg-body-tertiary rounded-3">
+  <h1 class="display-6 fw-semibold">Sistema de Gestão Integrada</h1>
+  <p class="lead mb-4">O esqueleto do projeto está funcionando. Os módulos serão entregues ao longo dos sprints.</p>
+  <a class="btn btn-dark" href="{% url 'admin:index' %}">Acessar a administração</a>
+</div>
+{% endblock %}
