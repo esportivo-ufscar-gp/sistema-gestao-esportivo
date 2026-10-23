@@ -1,0 +1,15 @@
+[run]
+source = apps
+branch = True
+omit =
+    */migrations/*
+    */apps.py
+    */tests.py
+    */tests/*
+
+[report]
+show_missing = True
+skip_empty = True
+# Plano de qualidade: mínimo de 70% nos sprints intermediários e 80% na entrega final.
+# No Sprint 4, troque para fail_under = 80.
+fail_under = 70
