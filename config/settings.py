@@ -113,6 +113,17 @@ else:
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ------------------------------------------------------------------ Autenticação
+# O backend de e-mail atende a tela de entrada do sistema (pacote 4.1.1); o ModelBackend
+# continua atendendo o login por nome de usuário da tela do Django Admin.
+AUTHENTICATION_BACKENDS = [
+    "apps.contas.backends.BackendDeEmail",
+    "django.contrib.auth.backends.ModelBackend",
+]
+
+LOGIN_URL = "contas:entrar"
+LOGIN_REDIRECT_URL = "contas:painel"   # usado quando o perfil não tem destino próprio
+LOGOUT_REDIRECT_URL = "core:home"
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

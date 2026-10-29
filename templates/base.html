@@ -14,8 +14,16 @@
       <div class="d-flex align-items-center gap-3">
         {% if user.is_authenticated %}
           <span class="navbar-text">Olá, {{ user.get_username }}</span>
+          {% if user.is_staff %}
+            <a class="btn btn-outline-light btn-sm" href="{% url 'admin:index' %}">Administração</a>
+          {% endif %}
+          <form method="post" action="{% url 'contas:sair' %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-light btn-sm">Sair</button>
+          </form>
+        {% else %}
+          <a class="btn btn-outline-light btn-sm" href="{% url 'contas:entrar' %}">Entrar</a>
         {% endif %}
-        <a class="btn btn-outline-light btn-sm" href="{% url 'admin:index' %}">Administração</a>
       </div>
     </div>
   </nav>

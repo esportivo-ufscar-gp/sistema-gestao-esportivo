@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block titulo %}Painel | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<div class="p-4 p-md-5 bg-body-tertiary rounded-3">
+  <h1 class="h3 fw-semibold">Olá, {{ user.get_username }}</h1>
+
+  {% if perfil %}
+    <p class="lead mb-3">Seu perfil é <strong>{{ perfil }}</strong>.</p>
+  {% else %}
+    <p class="lead mb-3">
+      Sua conta ainda não tem um perfil. Peça a um administrador para atribuir um a você.
+    </p>
+  {% endif %}
+
+  <p class="mb-0 text-body-secondary">
+    Esta é uma página provisória. A área de cada perfil será criada nos próximos pacotes:
+    o PDV para o vendedor, o painel de estoque para o estoquista e o catálogo da loja online
+    para o cliente.
+  </p>
+</div>
+{% endblock %}

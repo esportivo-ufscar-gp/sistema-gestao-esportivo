@@ -59,6 +59,7 @@ exigem o PostgreSQL.
 ```bash
 python manage.py migrate
 python manage.py createsuperuser
+python manage.py criar_perfis             # cria os quatro perfis e suas permissões
 python manage.py loaddata dados_exemplo   # catálogo de demonstração (opcional)
 python manage.py runserver
 ```
@@ -67,6 +68,36 @@ Acesse http://localhost:8000 e a administração em http://localhost:8000/admin.
 
 A fixture `dados_exemplo` carrega 6 categorias e 10 produtos para demonstração. Os saldos que
 ela traz são apenas carga inicial: a partir daí, o estoque só muda pelo serviço de estoque.
+
+## Perfis e acesso
+
+A entrada do sistema é http://localhost:8000/contas/entrar/, com **e-mail e senha**. Todos os
+perfis entram por essa tela; o Django Admin mantém a sua própria tela, por nome de usuário.
+
+Os perfis são grupos do Django, criados pelo comando `criar_perfis`:
+
+| Perfil | Acesso hoje | Precisa de "Membro da equipe" (`is_staff`) |
+| --- | --- | --- |
+| `administrador` | Admin completo dos modelos de produtos | sim |
+| `vendedor` | só visualizar produtos no Admin; o PDV vem no pacote 4.4 | sim, se for usar o Admin |
+| `estoquista` | só visualizar produtos no Admin; o painel vem no pacote 4.3 | sim, se for usar o Admin |
+| `cliente` | nenhum acesso ao Admin; usa a loja online (pacote 4.5) | não |
+
+Rode `python manage.py criar_perfis` de novo sempre que um pacote novo acrescentar permissões
+(o comando é idempotente). Um superusuário conta como administrador mesmo fora do grupo.
+
+### Criar um usuário de cada perfil pelo Admin
+
+1. Entre no Admin como superusuário e vá em **Autenticação e autorização > Usuários > Adicionar**.
+2. Informe o nome de usuário e a senha e salve.
+3. Na tela seguinte, preencha o **endereço de e-mail** — é por ele que a pessoa entra no
+   sistema. Use um e-mail diferente para cada usuário.
+4. Em **Permissões**, mova para "Grupos escolhidos" apenas o grupo do perfil dela.
+5. Marque **Membro da equipe** se o perfil usa o Admin (veja a tabela acima). Deixe
+   **Superusuário** só para quem administra o projeto.
+6. Salve e peça para a pessoa entrar em `/contas/entrar/` com o e-mail e a senha.
+
+Para trocar o perfil de alguém, basta trocar o grupo: as permissões vêm do grupo, não do usuário.
 
 ## Qualidade
 
