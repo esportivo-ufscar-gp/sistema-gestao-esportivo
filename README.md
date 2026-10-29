@@ -59,10 +59,14 @@ exigem o PostgreSQL.
 ```bash
 python manage.py migrate
 python manage.py createsuperuser
+python manage.py loaddata dados_exemplo   # catálogo de demonstração (opcional)
 python manage.py runserver
 ```
 
 Acesse http://localhost:8000 e a administração em http://localhost:8000/admin.
+
+A fixture `dados_exemplo` carrega 6 categorias e 10 produtos para demonstração. Os saldos que
+ela traz são apenas carga inicial: a partir daí, o estoque só muda pelo serviço de estoque.
 
 ## Qualidade
 

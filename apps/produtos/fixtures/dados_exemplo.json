@@ -1,0 +1,200 @@
+[
+  {
+    "model": "produtos.categoria",
+    "pk": 1,
+    "fields": {
+      "nome": "Corrida",
+      "ativa": true
+    }
+  },
+  {
+    "model": "produtos.categoria",
+    "pk": 2,
+    "fields": {
+      "nome": "Futebol",
+      "ativa": true
+    }
+  },
+  {
+    "model": "produtos.categoria",
+    "pk": 3,
+    "fields": {
+      "nome": "Academia",
+      "ativa": true
+    }
+  },
+  {
+    "model": "produtos.categoria",
+    "pk": 4,
+    "fields": {
+      "nome": "Natação",
+      "ativa": true
+    }
+  },
+  {
+    "model": "produtos.categoria",
+    "pk": 5,
+    "fields": {
+      "nome": "Ciclismo",
+      "ativa": true
+    }
+  },
+  {
+    "model": "produtos.categoria",
+    "pk": 6,
+    "fields": {
+      "nome": "Acessórios",
+      "ativa": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 1,
+    "fields": {
+      "codigo": "100110",
+      "nome": "Tênis de corrida amortecido",
+      "descricao": "Tênis leve com entressola amortecida, indicado para treinos de rua e corridas de longa distância.",
+      "imagem": "",
+      "preco": "349.90",
+      "categoria": 1,
+      "estoque_atual": 12,
+      "estoque_minimo": 4,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 2,
+    "fields": {
+      "codigo": "100231",
+      "nome": "Camisa de treino dry-fit",
+      "descricao": "Camisa de malha dry-fit com secagem rápida, para treinos de musculação e atividades em grupo.",
+      "imagem": "",
+      "preco": "79.90",
+      "categoria": 3,
+      "estoque_atual": 18,
+      "estoque_minimo": 6,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 3,
+    "fields": {
+      "codigo": "100245",
+      "nome": "Camisa de futebol listrada",
+      "descricao": "Camisa de futebol listrada em tecido respirável, com corte solto para jogos e treinos.",
+      "imagem": "",
+      "preco": "129.90",
+      "categoria": 2,
+      "estoque_atual": 2,
+      "estoque_minimo": 5,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 4,
+    "fields": {
+      "codigo": "100250",
+      "nome": "Chuteira society",
+      "descricao": "Chuteira para campo sintético, com travas baixas e cabedal reforçado.",
+      "imagem": "",
+      "preco": "279.90",
+      "categoria": 2,
+      "estoque_atual": 2,
+      "estoque_minimo": 4,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 5,
+    "fields": {
+      "codigo": "100260",
+      "nome": "Camisa térmica manga longa",
+      "descricao": "Camisa térmica de manga longa, com compressão leve para treinos em dias frios.",
+      "imagem": "",
+      "preco": "99.90",
+      "categoria": 3,
+      "estoque_atual": 0,
+      "estoque_minimo": 3,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 6,
+    "fields": {
+      "codigo": "100275",
+      "nome": "Bola de futebol de campo",
+      "descricao": "Bola de futebol de campo costurada, tamanho oficial e miolo substituível.",
+      "imagem": "",
+      "preco": "149.90",
+      "categoria": 2,
+      "estoque_atual": 10,
+      "estoque_minimo": 4,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 7,
+    "fields": {
+      "codigo": "100310",
+      "nome": "Luvas de musculação",
+      "descricao": "Par de luvas com palma emborrachada e punho ajustável, para proteção nos treinos com peso.",
+      "imagem": "",
+      "preco": "69.90",
+      "categoria": 3,
+      "estoque_atual": 15,
+      "estoque_minimo": 5,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 8,
+    "fields": {
+      "codigo": "100420",
+      "nome": "Óculos de natação antiembaçante",
+      "descricao": "Óculos de natação com lentes antiembaçantes, proteção UV e tirante ajustável.",
+      "imagem": "",
+      "preco": "59.90",
+      "categoria": 4,
+      "estoque_atual": 20,
+      "estoque_minimo": 5,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 9,
+    "fields": {
+      "codigo": "100480",
+      "nome": "Capacete de ciclismo",
+      "descricao": "Capacete de ciclismo com casco ventilado, regulagem occipital e fivela de ajuste rápido.",
+      "imagem": "",
+      "preco": "229.90",
+      "categoria": 5,
+      "estoque_atual": 0,
+      "estoque_minimo": 2,
+      "ativo": true
+    }
+  },
+  {
+    "model": "produtos.produto",
+    "pk": 10,
+    "fields": {
+      "codigo": "100512",
+      "nome": "Garrafa térmica 750 ml",
+      "descricao": "Garrafa térmica de 750 ml em aço inoxidável, mantém a temperatura da bebida por horas.",
+      "imagem": "",
+      "preco": "49.90",
+      "categoria": 6,
+      "estoque_atual": 25,
+      "estoque_minimo": 8,
+      "ativo": true
+    }
+  }
+]
