@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block titulo %}Painel de estoque | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<h1 class="h3 mb-4">Painel de estoque</h1>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-5">
+
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Movimentar estoque</div>
+      <div class="card-body">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label" for="{{ formulario.produto.id_for_label }}">{{ formulario.produto.label }}</label>
+            {{ formulario.produto }}
+            {% for erro in formulario.produto.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+          </div>
+
+          <div class="row g-3">
+            <div class="col-7 mb-3">
+              <label class="form-label" for="{{ formulario.tipo.id_for_label }}">{{ formulario.tipo.label }}</label>
+              {{ formulario.tipo }}
+              {% for erro in formulario.tipo.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+            </div>
+            <div class="col-5 mb-3">
+              <label class="form-label" for="{{ formulario.quantidade.id_for_label }}">{{ formulario.quantidade.label }}</label>
+              {{ formulario.quantidade }}
+              {% for erro in formulario.quantidade.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label" for="{{ formulario.motivo.id_for_label }}">{{ formulario.motivo.label }}</label>
+            {{ formulario.motivo }}
+            {% for erro in formulario.motivo.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+          </div>
+
+          <button type="submit" class="btn btn-dark w-100">Registrar movimento</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card shadow-sm mt-4">
+      <div class="card-header fw-semibold">Produtos abaixo do mínimo</div>
+      <ul class="list-group list-group-flush">
+        {% for produto in alertas %}
+          <li class="list-group-item d-flex justify-content-between align-items-center gap-3">
+            <div>
+              <div class="fw-semibold">{{ produto.nome }}</div>
+              <div class="small text-body-secondary">
+                {{ produto.codigo }} · saldo {{ produto.estoque_atual }} · mínimo {{ produto.estoque_minimo }}
+              </div>
+            </div>
+            {% if produto.estoque_atual == 0 %}
+              <span class="badge text-bg-danger">Sem estoque</span>
+            {% else %}
+              <span class="badge text-bg-warning">Repor</span>
+            {% endif %}
+          </li>
+        {% empty %}
+          <li class="list-group-item text-body-secondary">Nenhum produto abaixo do mínimo.</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+  </div>
+
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Saldo por produto</div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Código</th>
+              <th scope="col">Produto</th>
+              <th scope="col" class="text-end">Saldo</th>
+              <th scope="col" class="text-end">Mínimo</th>
+              <th scope="col" class="text-end">Uma unidade</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for produto in produtos %}
+              <tr>
+                <td class="text-body-secondary">{{ produto.codigo }}</td>
+                <td>
+                  {{ produto.nome }}
+                  <div class="small text-body-secondary">{{ produto.categoria.nome }}</div>
+                </td>
+                <td class="text-end">
+                  {% if produto.estoque_atual == 0 %}
+                    <span class="badge text-bg-danger">Sem estoque</span>
+                  {% elif produto.estoque_atual <= produto.estoque_minimo %}
+                    <span class="badge text-bg-warning">{{ produto.estoque_atual }}</span>
+                  {% else %}
+                    {{ produto.estoque_atual }}
+                  {% endif %}
+                </td>
+                <td class="text-end">{{ produto.estoque_minimo }}</td>
+                <td>
+                  <div class="d-flex gap-1 justify-content-end">
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="produto" value="{{ produto.pk }}">
+                      <input type="hidden" name="tipo" value="saida">
+                      <input type="hidden" name="quantidade" value="1">
+                      <input type="hidden" name="motivo" value="Saída de uma unidade pelo painel">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary"
+                              aria-label="Retirar uma unidade de {{ produto.nome }}"
+                              {% if produto.estoque_atual == 0 %}disabled{% endif %}>&minus;</button>
+                    </form>
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="produto" value="{{ produto.pk }}">
+                      <input type="hidden" name="tipo" value="entrada">
+                      <input type="hidden" name="quantidade" value="1">
+                      <input type="hidden" name="motivo" value="Entrada de uma unidade pelo painel">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary"
+                              aria-label="Acrescentar uma unidade de {{ produto.nome }}">&plus;</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-body-secondary">Nenhum produto ativo cadastrado.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

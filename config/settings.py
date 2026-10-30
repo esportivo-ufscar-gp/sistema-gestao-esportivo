@@ -7,6 +7,7 @@ arquivo .env (veja .env.example). Nunca envie o .env para o repositório.
 import os
 from pathlib import Path
 
+from django.contrib import messages
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -68,6 +69,9 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
+
+# O Bootstrap chama de "danger" o que o Django chama de "error" (alert-danger no base.html).
+MESSAGE_TAGS = {messages.ERROR: "danger"}
 
 TEMPLATES = [
     {

@@ -210,21 +210,31 @@ class PerfisTests(BaseDeContas):
         )
         self.assertEqual(PERFIS, ("administrador", "vendedor", "estoquista", "cliente"))
 
-    def test_administrador_tem_todas_as_permissoes_de_produtos(self):
-        permissoes = self._codenames(PERFIL_ADMINISTRADOR)
-
+    def test_administrador_tem_todas_as_permissoes_de_produtos_e_de_estoque(self):
         self.assertEqual(
-            permissoes,
+            self._codenames(PERFIL_ADMINISTRADOR, "produtos"),
             {
                 "add_categoria", "change_categoria", "delete_categoria", "view_categoria",
                 "add_produto", "change_produto", "delete_produto", "view_produto",
             },
         )
+        self.assertEqual(
+            self._codenames(PERFIL_ADMINISTRADOR, "estoque"),
+            {
+                "add_movimentoestoque", "change_movimentoestoque",
+                "delete_movimentoestoque", "view_movimentoestoque",
+            },
+        )
 
-    def test_vendedor_e_estoquista_so_visualizam_produtos(self):
-        for perfil in (PERFIL_VENDEDOR, PERFIL_ESTOQUISTA):
-            with self.subTest(perfil=perfil):
-                self.assertEqual(self._codenames(perfil), {"view_categoria", "view_produto"})
+    def test_vendedor_so_visualiza_produtos(self):
+        self.assertEqual(self._codenames(PERFIL_VENDEDOR), {"view_categoria", "view_produto"})
+
+    def test_estoquista_visualiza_produtos_e_registra_movimentos(self):
+        self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "produtos"), {"view_categoria", "view_produto"})
+        self.assertEqual(
+            self._codenames(PERFIL_ESTOQUISTA, "estoque"),
+            {"view_movimentoestoque", "add_movimentoestoque"},
+        )
 
     def test_cliente_nao_tem_permissao_no_admin(self):
         self.assertEqual(self._codenames(PERFIL_CLIENTE), set())
@@ -261,9 +271,11 @@ class PerfisTests(BaseDeContas):
         self.assertFalse(self.administrador.groups.exists())
         self.assertEqual(perfil_do_usuario(self.administrador), PERFIL_ADMINISTRADOR)
 
-    def _codenames(self, perfil):
-        grupo = Group.objects.get(name=perfil)
-        return set(grupo.permissions.values_list("codename", flat=True))
+    def _codenames(self, perfil, app_label=None):
+        permissoes = Group.objects.get(name=perfil).permissions
+        if app_label:
+            permissoes = permissoes.filter(content_type__app_label=app_label)
+        return set(permissoes.values_list("codename", flat=True))
 
 
 class DestinoAposLoginTests(BaseDeContas):
@@ -279,10 +291,20 @@ class DestinoAposLoginTests(BaseDeContas):
 
         self.assertRedirects(resposta, reverse("admin:index"))
 
-    def test_vendedor_estoquista_e_cliente_vao_para_o_painel(self):
-        for usuario in (self.vendedor, self.estoquista, self.cliente):
+    def test_vendedor_e_cliente_vao_para_o_painel_provisorio(self):
+        for usuario in (self.vendedor, self.cliente):
             with self.subTest(usuario=usuario.username):
                 self.assertEqual(destino_apos_login(usuario), reverse("contas:painel"))
+
+    def test_estoquista_vai_para_o_painel_de_estoque(self):
+        self.assertEqual(destino_apos_login(self.estoquista), reverse("estoque:painel"))
+
+        resposta = self.client.post(
+            reverse("contas:entrar"),
+            {"username": "estoquista@exemplo.com", "password": SENHA},
+        )
+
+        self.assertRedirects(resposta, reverse("estoque:painel"))
 
     def test_usuario_sem_perfil_vai_para_o_painel(self):
         self.assertEqual(destino_apos_login(self.sem_perfil), reverse("contas:painel"))

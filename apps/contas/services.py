@@ -26,23 +26,24 @@ PERFIS = (PERFIL_ADMINISTRADOR, PERFIL_VENDEDOR, PERFIL_ESTOQUISTA, PERFIL_CLIEN
 
 TODAS_AS_ACOES = ("add", "change", "delete", "view")
 SOMENTE_VER = ("view",)
+VER_E_ACRESCENTAR = ("view", "add")
 
 # Perfil -> app da EAP -> ações liberadas no Admin. Os próximos pacotes acrescentam aqui
-# os seus apps ("estoque", "vendas", "clientes"); hoje só existem os modelos de produtos.
+# os seus apps ("vendas", "clientes").
 PERMISSOES_POR_PERFIL = {
-    PERFIL_ADMINISTRADOR: {"produtos": TODAS_AS_ACOES},
+    PERFIL_ADMINISTRADOR: {"produtos": TODAS_AS_ACOES, "estoque": TODAS_AS_ACOES},
     PERFIL_VENDEDOR: {"produtos": SOMENTE_VER},
-    PERFIL_ESTOQUISTA: {"produtos": SOMENTE_VER},
+    # O estoquista trabalha no painel em /estoque/; no Admin ele consulta o histórico.
+    PERFIL_ESTOQUISTA: {"produtos": SOMENTE_VER, "estoque": VER_E_ACRESCENTAR},
     PERFIL_CLIENTE: {},  # o cliente usa a loja online, não o Admin
 }
 
 # Perfil -> rota inicial depois do login. Trocar quando as telas existirem:
-# vendedor -> "vendas:pdv" (4.4.1), estoquista -> "estoque:painel" (4.3.3),
-# cliente -> "loja:catalogo" (4.5.1).
+# vendedor -> "vendas:pdv" (4.4.1), cliente -> "loja:catalogo" (4.5.1).
 DESTINO_POR_PERFIL = {
     PERFIL_ADMINISTRADOR: "admin:index",
     PERFIL_VENDEDOR: "contas:painel",
-    PERFIL_ESTOQUISTA: "contas:painel",
+    PERFIL_ESTOQUISTA: "estoque:painel",
     PERFIL_CLIENTE: "contas:painel",
 }
 

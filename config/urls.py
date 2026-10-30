@@ -10,6 +10,7 @@ admin.site.index_title = "Gestão da loja"
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("contas/", include("apps.contas.urls")),
+    path("estoque/", include("apps.estoque.urls")),
     path("", include("apps.core.urls")),
 ]
 

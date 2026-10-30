@@ -78,10 +78,13 @@ Os perfis são grupos do Django, criados pelo comando `criar_perfis`:
 
 | Perfil | Acesso hoje | Precisa de "Membro da equipe" (`is_staff`) |
 | --- | --- | --- |
-| `administrador` | Admin completo dos modelos de produtos | sim |
+| `administrador` | Admin completo de produtos e estoque, e o painel de estoque | sim |
 | `vendedor` | só visualizar produtos no Admin; o PDV vem no pacote 4.4 | sim, se for usar o Admin |
-| `estoquista` | só visualizar produtos no Admin; o painel vem no pacote 4.3 | sim, se for usar o Admin |
+| `estoquista` | painel de estoque em `/estoque/`; no Admin, consulta produtos e o histórico de movimentos | só se for usar o Admin |
 | `cliente` | nenhum acesso ao Admin; usa a loja online (pacote 4.5) | não |
+
+Depois de entrar, o estoquista vai direto para o painel de estoque; os demais perfis vão para
+o Admin (administrador) ou para o painel provisório (vendedor e cliente).
 
 Rode `python manage.py criar_perfis` de novo sempre que um pacote novo acrescentar permissões
 (o comando é idempotente). Um superusuário conta como administrador mesmo fora do grupo.
