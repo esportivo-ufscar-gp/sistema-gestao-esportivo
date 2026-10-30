@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block titulo %}PDV | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h1 class="h3 mb-0">PDV | Loja física</h1>
+  <span class="text-body-secondary small">Vendedor: {{ user.get_username }}</span>
+</div>
+
+<div class="row g-4">
+
+  <div class="col-12 col-lg-7">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Buscar produto</div>
+      <div class="card-body">
+        <form method="get" class="row g-2 align-items-end">
+          <div class="col">
+            <label class="form-label" for="busca">Nome ou código</label>
+            <input type="search" class="form-control" id="busca" name="busca" value="{{ busca }}"
+                   placeholder="Ex.: camisa ou 100245">
+          </div>
+          <div class="col-auto">
+            <button type="submit" class="btn btn-dark">Buscar</button>
+          </div>
+          {% if busca %}
+            <div class="col-auto">
+              <a class="btn btn-outline-secondary" href="{% url 'vendas:pdv' %}">Limpar busca</a>
+            </div>
+          {% endif %}
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Produto</th>
+              <th scope="col">Código</th>
+              <th scope="col">Estoque</th>
+              <th scope="col" class="text-end">Preço</th>
+              <th scope="col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for produto in resultados %}
+              <tr>
+                <td>
+                  {{ produto.nome }}
+                  <div class="small text-body-secondary">{{ produto.categoria.nome }}</div>
+                </td>
+                <td class="text-body-secondary">{{ produto.codigo }}</td>
+                <td>
+                  {% if produto.estoque_atual == 0 %}
+                    <span class="badge text-bg-danger">Sem estoque</span>
+                  {% elif produto.estoque_atual <= produto.estoque_minimo %}
+                    <span class="badge text-bg-warning">Estoque baixo: {{ produto.estoque_atual }}</span>
+                  {% else %}
+                    {{ produto.estoque_atual }}
+                  {% endif %}
+                </td>
+                <td class="text-end">R$ {{ produto.preco|floatformat:2 }}</td>
+                <td class="text-end">
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="adicionar">
+                    <input type="hidden" name="produto" value="{{ produto.pk }}">
+                    <input type="hidden" name="busca" value="{{ busca }}">
+                    <button type="submit" class="btn btn-sm btn-outline-dark"
+                            {% if produto.estoque_atual == 0 %}disabled{% endif %}>Adicionar</button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="5" class="text-body-secondary">Nenhum produto encontrado para "{{ busca }}".</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">Venda atual</div>
+
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            {% for linha in linhas %}
+              <tr>
+                <td>
+                  {{ linha.produto.nome }}
+                  <div class="small text-body-secondary">R$ {{ linha.produto.preco|floatformat:2 }} cada</div>
+                </td>
+                <td>
+                  <div class="d-flex gap-1 align-items-center">
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="acao" value="diminuir">
+                      <input type="hidden" name="produto" value="{{ linha.produto.pk }}">
+                      <input type="hidden" name="busca" value="{{ busca }}">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary"
+                              aria-label="Tirar uma unidade de {{ linha.produto.nome }}">&minus;</button>
+                    </form>
+                    <span class="px-1">{{ linha.quantidade }}</span>
+                    <form method="post">
+                      {% csrf_token %}
+                      <input type="hidden" name="acao" value="aumentar">
+                      <input type="hidden" name="produto" value="{{ linha.produto.pk }}">
+                      <input type="hidden" name="busca" value="{{ busca }}">
+                      <button type="submit" class="btn btn-sm btn-outline-secondary"
+                              aria-label="Somar uma unidade de {{ linha.produto.nome }}"
+                              {% if linha.quantidade >= linha.produto.estoque_atual %}disabled{% endif %}>&plus;</button>
+                    </form>
+                  </div>
+                </td>
+                <td class="text-end">R$ {{ linha.subtotal|floatformat:2 }}</td>
+                <td class="text-end">
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="remover">
+                    <input type="hidden" name="produto" value="{{ linha.produto.pk }}">
+                    <input type="hidden" name="busca" value="{{ busca }}">
+                    <button type="submit" class="btn btn-sm btn-link text-danger p-0"
+                            aria-label="Remover {{ linha.produto.nome }} da venda">Remover</button>
+                  </form>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="text-body-secondary">Nenhum item na venda. Busque um produto e clique em Adicionar.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card-body border-top">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="fw-semibold">Total</span>
+          <span class="fs-4 fw-semibold">R$ {{ total|floatformat:2 }}</span>
+        </div>
+
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="acao" value="finalizar">
+          <input type="hidden" name="busca" value="{{ busca }}">
+
+          <div class="mb-3">
+            <label class="form-label" for="forma_pagamento">Forma de pagamento</label>
+            <select class="form-select" id="forma_pagamento" name="forma_pagamento" required
+                    {% if not linhas %}disabled{% endif %}>
+              <option value="">Selecione</option>
+              {% for valor, texto in formas_de_pagamento %}
+                <option value="{{ valor }}">{{ texto }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <button type="submit" class="btn btn-dark w-100" {% if not linhas %}disabled{% endif %}>
+            Finalizar venda
+          </button>
+        </form>
+
+        <form method="post" class="mt-2">
+          {% csrf_token %}
+          <input type="hidden" name="acao" value="limpar">
+          <input type="hidden" name="busca" value="{{ busca }}">
+          <button type="submit" class="btn btn-outline-secondary w-100" {% if not linhas %}disabled{% endif %}>
+            Limpar venda
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card shadow-sm mt-4">
+  <div class="card-header fw-semibold">Últimas vendas</div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th scope="col">Número</th>
+          <th scope="col">Hora</th>
+          <th scope="col">Pagamento</th>
+          <th scope="col" class="text-end">Total</th>
+          <th scope="col">Status</th>
+          <th scope="col" class="text-end"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for venda in ultimas_vendas %}
+          <tr>
+            <td class="fw-semibold">{{ venda.numero_formatado }}</td>
+            <td>{{ venda.criado_em|date:"d/m" }} às {{ venda.criado_em|time:"H:i" }}</td>
+            <td>{{ venda.get_forma_pagamento_display }}</td>
+            <td class="text-end">R$ {{ venda.total|floatformat:2 }}</td>
+            <td>
+              {% if venda.cancelada %}
+                <span class="badge text-bg-secondary">Cancelada</span>
+              {% else %}
+                <span class="badge text-bg-success">{{ venda.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if not venda.cancelada %}
+                <form method="post"
+                      onsubmit="return confirm('Cancelar a venda {{ venda.numero_formatado }}? Os itens voltam ao estoque.');">
+                  {% csrf_token %}
+                  <input type="hidden" name="acao" value="cancelar">
+                  <input type="hidden" name="venda" value="{{ venda.pk }}">
+                  <input type="hidden" name="busca" value="{{ busca }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Cancelar venda</button>
+                </form>
+              {% endif %}
+            </td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="6" class="text-body-secondary">Nenhuma venda registrada no PDV ainda.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

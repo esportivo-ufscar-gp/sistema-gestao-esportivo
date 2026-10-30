@@ -14,12 +14,14 @@ from .models import MovimentoEstoque
 
 @admin.register(MovimentoEstoque)
 class MovimentoEstoqueAdmin(admin.ModelAdmin):
-    list_display = ("criado_em", "produto", "tipo", "quantidade", "saldo_apos", "usuario", "motivo")
+    list_display = ("criado_em", "produto", "tipo", "quantidade", "saldo_apos", "venda", "usuario", "motivo")
     list_filter = ("tipo", "produto")
     search_fields = ("produto__nome", "produto__codigo", "motivo")
-    list_select_related = ("produto", "usuario")
+    list_select_related = ("produto", "usuario", "venda")
     date_hierarchy = "criado_em"
-    readonly_fields = ("produto", "tipo", "quantidade", "saldo_apos", "usuario", "motivo", "criado_em")
+    readonly_fields = (
+        "produto", "tipo", "quantidade", "saldo_apos", "venda", "usuario", "motivo", "criado_em",
+    )
 
     def has_add_permission(self, request):
         return False
