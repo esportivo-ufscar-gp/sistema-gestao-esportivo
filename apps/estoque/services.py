@@ -80,13 +80,15 @@ def registrar_ajuste(produto, quantidade, usuario=None, motivo=""):
 
 # ------------------------------------------------------------------ Vendas e estornos
 @transaction.atomic
-def baixar_itens(itens, usuario=None, motivo=""):
+def baixar_itens(itens, usuario=None, motivo="", venda=None):
     """
     Baixa do estoque os itens de uma venda, do PDV ou da loja online (HU06).
 
     `itens` é uma sequência de pares (produto, quantidade). Ou todos os itens são baixados,
     ou nenhum: se faltar saldo em qualquer um deles, levanta SaldoInsuficiente — que diz qual
     produto faltou — e a transação volta atrás.
+
+    `venda` liga os movimentos à venda que os gerou; fica em branco nas baixas sem venda.
     """
     quantidades = _consolida(itens)
     produtos = _bloqueia(quantidades)
@@ -98,19 +100,19 @@ def baixar_itens(itens, usuario=None, motivo=""):
             raise SaldoInsuficiente(produto, quantidade, produto.estoque_atual)
 
     return [
-        _aplica(produtos[pk], quantidade, TipoDeMovimento.SAIDA_VENDA, usuario, motivo)
+        _aplica(produtos[pk], quantidade, TipoDeMovimento.SAIDA_VENDA, usuario, motivo, venda)
         for pk, quantidade in quantidades.items()
     ]
 
 
 @transaction.atomic
-def estornar_itens(itens, usuario=None, motivo=""):
+def estornar_itens(itens, usuario=None, motivo="", venda=None):
     """Devolve ao estoque os itens de uma venda cancelada (HU06)."""
     quantidades = _consolida(itens)
     produtos = _bloqueia(quantidades)
 
     return [
-        _aplica(produtos[pk], quantidade, TipoDeMovimento.ESTORNO, usuario, motivo)
+        _aplica(produtos[pk], quantidade, TipoDeMovimento.ESTORNO, usuario, motivo, venda)
         for pk, quantidade in quantidades.items()
     ]
 
@@ -172,7 +174,7 @@ def _bloqueia(pks):
     return produtos
 
 
-def _aplica(produto, quantidade, tipo, usuario, motivo):
+def _aplica(produto, quantidade, tipo, usuario, motivo, venda=None):
     """Muda o saldo do produto já bloqueado e grava o movimento correspondente."""
     produto.estoque_atual += quantidade if tipo in TIPOS_DE_ENTRADA else -quantidade
     produto.save(update_fields=["estoque_atual"])
@@ -184,4 +186,5 @@ def _aplica(produto, quantidade, tipo, usuario, motivo):
         saldo_apos=produto.estoque_atual,
         usuario=usuario,
         motivo=motivo,
+        venda=venda,
     )

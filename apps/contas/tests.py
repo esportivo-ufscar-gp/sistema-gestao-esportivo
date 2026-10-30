@@ -74,7 +74,8 @@ class EntradaTests(BaseDeContas):
             {"username": "vendedor@exemplo.com", "password": SENHA},
         )
 
-        self.assertRedirects(resposta, reverse("contas:painel"))
+        # A página inicial do vendedor é o PDV; o mapa está em services.DESTINO_POR_PERFIL.
+        self.assertRedirects(resposta, reverse("vendas:pdv"))
         self.assertEqual(int(self.client.session["_auth_user_id"]), self.vendedor.pk)
 
     def test_email_pode_ser_escrito_com_maiusculas(self):
@@ -83,7 +84,7 @@ class EntradaTests(BaseDeContas):
             {"username": "Vendedor@Exemplo.COM", "password": SENHA},
         )
 
-        self.assertRedirects(resposta, reverse("contas:painel"))
+        self.assertRedirects(resposta, reverse("vendas:pdv"))
 
     def test_mensagem_de_erro_nao_revela_qual_campo_esta_errado(self):
         endereco = reverse("contas:entrar")
@@ -210,7 +211,7 @@ class PerfisTests(BaseDeContas):
         )
         self.assertEqual(PERFIS, ("administrador", "vendedor", "estoquista", "cliente"))
 
-    def test_administrador_tem_todas_as_permissoes_de_produtos_e_de_estoque(self):
+    def test_administrador_tem_todas_as_permissoes_dos_modulos_entregues(self):
         self.assertEqual(
             self._codenames(PERFIL_ADMINISTRADOR, "produtos"),
             {
@@ -225,9 +226,18 @@ class PerfisTests(BaseDeContas):
                 "delete_movimentoestoque", "view_movimentoestoque",
             },
         )
+        self.assertEqual(
+            self._codenames(PERFIL_ADMINISTRADOR, "vendas"),
+            {
+                "add_venda", "change_venda", "delete_venda", "view_venda",
+                "add_itemvenda", "change_itemvenda", "delete_itemvenda", "view_itemvenda",
+            },
+        )
 
-    def test_vendedor_so_visualiza_produtos(self):
-        self.assertEqual(self._codenames(PERFIL_VENDEDOR), {"view_categoria", "view_produto"})
+    def test_vendedor_visualiza_produtos_e_vendas(self):
+        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "produtos"), {"view_categoria", "view_produto"})
+        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "vendas"), {"view_venda", "view_itemvenda"})
+        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "estoque"), set())
 
     def test_estoquista_visualiza_produtos_e_registra_movimentos(self):
         self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "produtos"), {"view_categoria", "view_produto"})
@@ -291,10 +301,18 @@ class DestinoAposLoginTests(BaseDeContas):
 
         self.assertRedirects(resposta, reverse("admin:index"))
 
-    def test_vendedor_e_cliente_vao_para_o_painel_provisorio(self):
-        for usuario in (self.vendedor, self.cliente):
-            with self.subTest(usuario=usuario.username):
-                self.assertEqual(destino_apos_login(usuario), reverse("contas:painel"))
+    def test_cliente_vai_para_o_painel_provisorio(self):
+        self.assertEqual(destino_apos_login(self.cliente), reverse("contas:painel"))
+
+    def test_vendedor_vai_para_o_pdv(self):
+        self.assertEqual(destino_apos_login(self.vendedor), reverse("vendas:pdv"))
+
+        resposta = self.client.post(
+            reverse("contas:entrar"),
+            {"username": "vendedor@exemplo.com", "password": SENHA},
+        )
+
+        self.assertRedirects(resposta, reverse("vendas:pdv"))
 
     def test_estoquista_vai_para_o_painel_de_estoque(self):
         self.assertEqual(destino_apos_login(self.estoquista), reverse("estoque:painel"))

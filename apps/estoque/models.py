@@ -34,7 +34,15 @@ class MovimentoEstoque(models.Model):
     tipo = models.CharField("tipo", max_length=20, choices=TipoDeMovimento.choices)
     quantidade = models.IntegerField("quantidade")
     saldo_apos = models.IntegerField("saldo após")
-    # O campo `venda` entra no pacote 4.4.1, junto com o modelo Venda.
+    venda = models.ForeignKey(
+        "vendas.Venda",
+        on_delete=models.PROTECT,  # venda com movimento não é excluída, só cancelada
+        null=True,
+        blank=True,
+        related_name="movimentos",
+        verbose_name="venda",
+        help_text="Preenchido na baixa por venda e no estorno de cancelamento.",
+    )
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
