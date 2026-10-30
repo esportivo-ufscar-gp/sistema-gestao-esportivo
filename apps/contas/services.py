@@ -29,17 +29,16 @@ SOMENTE_VER = ("view",)
 VER_E_ACRESCENTAR = ("view", "add")
 
 # Perfil -> app da EAP -> ações liberadas no Admin. Os próximos pacotes acrescentam aqui
-# os seus apps ("clientes").
+# os seus apps ("estoque", "vendas", "clientes"); hoje só existem os modelos de produtos.
 PERMISSOES_POR_PERFIL = {
     PERFIL_ADMINISTRADOR: {
         "produtos": TODAS_AS_ACOES,
         "estoque": TODAS_AS_ACOES,
         "vendas": TODAS_AS_ACOES,
-    },
-    # O vendedor trabalha no PDV; no Admin ele só consulta.
-    PERFIL_VENDEDOR: {"produtos": SOMENTE_VER, "vendas": SOMENTE_VER},
-    # O estoquista trabalha no painel em /estoque/; no Admin ele consulta o histórico.
-    PERFIL_ESTOQUISTA: {"produtos": SOMENTE_VER, "estoque": VER_E_ACRESCENTAR},
+        "clientes": TODAS_AS_ACOES
+        },
+    PERFIL_VENDEDOR: {"produtos": SOMENTE_VER},
+    PERFIL_ESTOQUISTA: {"produtos": SOMENTE_VER},
     PERFIL_CLIENTE: {},  # o cliente usa a loja online, não o Admin
 }
 

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block titulo %}Política de Privacidade | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<div class="container my-5" style="max-width: 900px;">
+  <h1 class="mb-4">Política de Privacidade e Proteção de Dados (LGPD)</h1>
+  <p class="text-muted">Conforme a Lei Geral de Proteção de Dados (Lei nº 13.709/2018)</p>
+  <hr class="mb-4">
+
+  <section class="mb-4">
+    <h5>1. Controlador dos Dados</h5>
+    <p>O <strong>Esportivo UFSCar</strong> atua como controlador dos dados pessoais coletados na plataforma, responsabilizando-se pelo tratamento adequado nos termos da legislação brasileira vigente.</p>
+  </section>
+
+  <section class="mb-4">
+    <h5>2. Dados Pessoais Coletados</h5>
+    <p>Para viabilizar a criação da conta e o atendimento dos seus pedidos, coletamos estritamente os seguintes dados:</p>
+    <ul>
+      <li><strong>Nome Completo:</strong> identificação do titular da conta;</li>
+      <li><strong>E-mail:</strong> autenticação no sistema e envio de confirmações de pedidos;</li>
+      <li><strong>Telefone:</strong> contato operacional referente a pedidos ou suporte;</li>
+      <li><strong>Registro de Consentimento:</strong> data e hora (timestamp) do aceite dos termos legais.</li>
+    </ul>
+  </section>
+
+  <section class="mb-4">
+    <h5>3. Finalidades do Tratamento</h5>
+    <p>Os dados coletados são utilizados exclusivamente para:</p>
+    <ul>
+      <li>Processamento, faturamento e entrega de compras de artigos esportivos;</li>
+      <li>Manutenção do histórico de compras e suporte ao cliente;</li>
+      <li>Cumprimento de obrigações legais e regulatórias.</li>
+    </ul>
+  </section>
+
+  <section class="mb-4">
+    <h5>4. Base Legal e Consentimento</h5>
+    <p>O tratamento de seus dados é realizado fundamentado no <strong>Artigo 7º, inciso I (Consentimento do Titular)</strong> e <strong>inciso V (Execução de Contrato)</strong> da Lei nº 13.709/2018 (LGPD).</p>
+  </section>
+
+  <section class="mb-4">
+    <h5>5. Seus Direitos como Titular dos Dados</h5>
+    <p>Você pode, a qualquer momento e de forma gratuita, solicitar:</p>
+    <ul>
+      <li>Confirmação da existência de tratamento e acesso aos dados;</li>
+      <li>Correção de dados incompletos, inexatos ou desatualizados;</li>
+      <li>Eliminação ou anonimização de dados pessoais desnecessários;</li>
+      <li>Revogação do consentimento concedido.</li>
+    </ul>
+  </section>
+
+  <section class="mb-4">
+    <h5>6. Segurança das Informações</h5>
+    <p>Adotamos medidas técnicas e organizacionais adequadas, como criptografia de senhas e armazenamento seguro em banco de dados relacional (PostgreSQL), para proteger seus dados contra acessos não autorizados.</p>
+  </section>
+
+  <div class="mt-4">
+    <button type="button" onclick="fecharOuVoltar()" class="btn btn-secondary">
+      &laquo; Voltar para o cadastro
+    </button>
+  </div>
+</div>
+
+<script>
+  function fecharOuVoltar() {
+    window.close();
+    setTimeout(function() {
+      window.location.href = "{% url 'clientes:cadastro' %}";
+    }, 150);
+  }
+</script>
+{% endblock %}
