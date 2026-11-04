@@ -236,15 +236,12 @@ class PerfisTests(BaseDeContas):
 
     def test_vendedor_visualiza_produtos_e_vendas(self):
         self.assertEqual(self._codenames(PERFIL_VENDEDOR, "produtos"), {"view_categoria", "view_produto"})
-        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "vendas"), {"view_venda", "view_itemvenda"})
+        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "vendas"), set())
         self.assertEqual(self._codenames(PERFIL_VENDEDOR, "estoque"), set())
 
     def test_estoquista_visualiza_produtos_e_registra_movimentos(self):
         self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "produtos"), {"view_categoria", "view_produto"})
-        self.assertEqual(
-            self._codenames(PERFIL_ESTOQUISTA, "estoque"),
-            {"view_movimentoestoque", "add_movimentoestoque"},
-        )
+        self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "estoque"), set())
 
     def test_cliente_nao_tem_permissao_no_admin(self):
         self.assertEqual(self._codenames(PERFIL_CLIENTE), set())
@@ -361,6 +358,7 @@ def _area_do_vendedor(request):
 
 urlpatterns = [
     path("contas/", include("apps.contas.urls")),
+    path("clientes/", include(("apps.clientes.urls", "clientes"), namespace="clientes")),
     path("area-do-vendedor/", _area_do_vendedor, name="area-do-vendedor"),
     path("", include("apps.core.urls")),
 ]

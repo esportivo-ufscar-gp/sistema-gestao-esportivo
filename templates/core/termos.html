@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block titulo %}Termos de Uso | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<div class="container my-5" style="max-width: 900px;">
+  <h1 class="mb-4">Termos de Uso</h1>
+  <p class="text-muted">Última atualização: Outubro de 2026</p>
+  <hr class="mb-4">
+
+  <section class="mb-4">
+    <h5>1. Aceitação dos Termos</h5>
+    <p>Ao se cadastrar e utilizar o sistema de gestão e e-commerce <strong>Esportivo UFSCar</strong>, você concorda expressamente com os presentes Termos de Uso. Caso não concorde com qualquer disposição aqui prevista, solicitamos que não prossiga com o cadastro nem utilize a plataforma.</p>
+  </section>
+
+  <section class="mb-4">
+    <h5>2. Serviços Prestados</h5>
+    <p>O Esportivo UFSCar disponibiliza uma plataforma para consulta de catálogo, realização de pedidos de produtos esportivos e gestão de conta de usuário, atuando no âmbito da loja física e online do projeto.</p>
+  </section>
+
+  <section class="mb-4">
+    <h5>3. Cadastro e Segurança da Conta</h5>
+    <p>Para realizar compras e acompanhar pedidos, o usuário deverá fornecer dados autênticos (nome completo, e-mail e telefone) e criar uma senha de acesso. A responsabilidade pela guarda e confidencialidade das credenciais de acesso é exclusiva do usuário.</p>
+  </section>
+
+  <section class="mb-4">
+    <h5>4. Preços, Estoque e Pedidos</h5>
+    <p>Os preços e a disponibilidade dos produtos esportivos estão sujeitos a alterações sem aviso prévio. A confirmação do pedido depende da verificação de disponibilidade em estoque e do processamento do pagamento.</p>
+  </section>
+
+  <section class="mb-4">
+    <h5>5. Alterações nos Termos</h5>
+    <p>Reservamo-nos o direito de atualizar estes Termos de Uso a qualquer momento. Alterações significativas serão notificadas na plataforma ou por e-mail cadastrado.</p>
+  </section>
+
+  <div class="mt-4">
+    <button type="button" onclick="fecharOuVoltar()" class="btn btn-secondary">
+      &laquo; Voltar para o cadastro
+    </button>
+  </div>
+</div>
+
+<script>
+  function fecharOuVoltar() {
+    // Tenta fechar a aba atual
+    window.close();
+    
+    // Se a aba não fechar (ex: o navegador bloqueou ou foi navegação direta), redireciona
+    setTimeout(function() {
+      window.location.href = "{% url 'clientes:cadastro' %}";
+    }, 150);
+  }
+</script>
+{% endblock %}

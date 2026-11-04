@@ -39,9 +39,14 @@
           <button type="submit" class="btn btn-dark w-100">Entrar</button>
         </form>
 
-        <p class="text-body-secondary small mt-4 mb-0">
-          Vendedores, estoquistas e administradores da loja também entram por aqui, com o mesmo
-          e-mail e senha. Cada perfil é levado à sua área depois da entrada.
+        <p class="text-center small mt-4 mb-0">
+          Ainda não tem conta? <a href="{% url 'clientes:cadastro' %}">Criar conta</a>
+        </p>
+
+        <hr class="my-3">
+
+        <p class="text-body-secondary small mb-0">
+          Vendedores, estoquistas e administradores também entram por aqui; cada perfil abre a sua área do sistema.
         </p>
       </div>
     </div>
