@@ -1,0 +1,142 @@
+{% extends "loja/base_loja.html" %}
+
+{% block titulo %}Finalizar compra | Esportivo UFSCar{% endblock %}
+
+{% block cabecalho %}
+<header class="cabecalho-loja">
+  <div class="container d-flex flex-wrap align-items-center justify-content-between gap-3 py-3">
+    <a class="cabecalho-loja__marca" href="{% url 'loja:catalogo' %}">Esportivo UFSCar</a>
+    <span class="cabecalho-loja__usuario d-inline-flex align-items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path>
+      </svg>
+      Compra segura
+    </span>
+  </div>
+</header>
+{% endblock %}
+
+{% block conteudo %}
+{% include "loja/_etapas.html" with ativa=2 %}
+
+<h1 class="h2 fw-bold mb-4">Finalizar compra</h1>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  {% for erro in formulario.non_field_errors %}
+    <div class="alert alert-danger" role="alert">{{ erro }}</div>
+  {% endfor %}
+
+  <div class="row g-4 align-items-start">
+    <div class="col-12 col-lg-8 d-flex flex-column gap-4">
+
+      <section class="card border-0 shadow-sm" aria-labelledby="titulo-identificacao">
+        <div class="card-body p-4">
+          <div class="d-flex flex-wrap justify-content-between align-items-baseline gap-2 mb-3">
+            <h2 class="h5 fw-bold mb-0" id="titulo-identificacao">Identificação</h2>
+            {% if not cliente %}
+              <span class="small">Já tem cadastro? <a class="link-acao" href="{{ entrar_e_voltar }}">Entrar</a></span>
+            {% endif %}
+          </div>
+
+          {% if cliente %}
+            <dl class="row mb-2">
+              <dt class="col-sm-3 fw-normal text-body-secondary">Nome</dt>
+              <dd class="col-sm-9">{{ cliente.nome }}</dd>
+              <dt class="col-sm-3 fw-normal text-body-secondary">E-mail</dt>
+              <dd class="col-sm-9">{{ cliente.email }}</dd>
+              <dt class="col-sm-3 fw-normal text-body-secondary">Telefone</dt>
+              <dd class="col-sm-9">{{ cliente.telefone }}</dd>
+            </dl>
+            <p class="small text-body-secondary mb-0">
+              Você autorizou o uso dos seus dados (LGPD) no cadastro, em
+              {{ cliente.consentimento_em|date:"d/m/Y" }}.
+            </p>
+          {% else %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ formulario.nome.id_for_label }}">{{ formulario.nome.label }}</label>
+              {{ formulario.nome }}
+              {% for erro in formulario.nome.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+            </div>
+
+            <div class="row g-3 mb-3">
+              <div class="col-12 col-md-7">
+                <label class="form-label" for="{{ formulario.email.id_for_label }}">{{ formulario.email.label }}</label>
+                {{ formulario.email }}
+                {% for erro in formulario.email.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+                {% if email_de_uma_conta %}
+                  <a class="btn btn-sm btn-outline-dark mt-2" href="{{ entrar_e_voltar }}">Entrar</a>
+                {% endif %}
+              </div>
+              <div class="col-12 col-md-5">
+                <label class="form-label" for="{{ formulario.telefone.id_for_label }}">{{ formulario.telefone.label }}</label>
+                {{ formulario.telefone }}
+                {% for erro in formulario.telefone.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+              </div>
+            </div>
+
+            <div class="form-check">
+              {{ formulario.consentimento }}
+              <label class="form-check-label small" for="{{ formulario.consentimento.id_for_label }}">
+                {{ formulario.consentimento.label }}, conforme a
+                <a href="{% url 'core:privacidade' %}" target="_blank" rel="noopener">Política de Privacidade</a>
+                da Esportivo UFSCar e a LGPD. <span class="text-danger">(obrigatório)</span>
+              </label>
+              {% for erro in formulario.consentimento.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm" aria-labelledby="titulo-entrega">
+        <div class="card-body p-4">
+          <h2 class="h5 fw-bold mb-3" id="titulo-entrega">Entrega</h2>
+          <div class="form-check opcao-selecionada">
+            <input class="form-check-input" type="radio" id="entrega-retirada" checked disabled>
+            <label class="form-check-label" for="entrega-retirada">
+              <span class="fw-semibold">Retirada na loja</span> · <span class="texto-gratis">Grátis</span>
+              <span class="d-block small text-body-secondary">{{ loja_endereco }} · {{ loja_horario }}</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="card border-0 shadow-sm" aria-labelledby="titulo-pagamento">
+        <div class="card-body p-4">
+          <h2 class="h5 fw-bold mb-3" id="titulo-pagamento">Pagamento</h2>
+          <fieldset>
+            <legend class="form-label fs-6 mb-2">{{ formulario.forma_pagamento.label }}</legend>
+            <div class="d-flex flex-wrap gap-3">
+              {% for opcao in formulario.forma_pagamento %}
+                <div class="form-check opcao-pagamento">
+                  {{ opcao.tag }}
+                  <label class="form-check-label" for="{{ opcao.id_for_label }}">{{ opcao.choice_label }}</label>
+                </div>
+              {% endfor %}
+            </div>
+            {% for erro in formulario.forma_pagamento.errors %}<div class="form-text text-danger">{{ erro }}</div>{% endfor %}
+          </fieldset>
+          <p class="alert alert-info small mt-3 mb-0">
+            Ambiente de demonstração: o pagamento é simulado e nenhuma cobrança real é realizada.
+          </p>
+        </div>
+      </section>
+    </div>
+
+    <div class="col-12 col-lg-4">
+      <aside class="card border-0 shadow-sm resumo-pedido">
+        <div class="card-body p-4">
+          <h2 class="h5 fw-bold mb-3">Resumo do pedido</h2>
+          {% include "loja/_resumo_itens.html" with itens=linhas %}
+          <button type="submit" class="btn btn-primary btn-lg w-100">Confirmar pedido</button>
+          <p class="text-center mt-3 mb-0">
+            <a class="link-acao" href="{% url 'loja:carrinho' %}">Voltar ao carrinho</a>
+          </p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</form>
+{% endblock %}

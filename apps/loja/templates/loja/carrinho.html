@@ -4,11 +4,7 @@
 {% block titulo %}Carrinho | Esportivo UFSCar{% endblock %}
 
 {% block conteudo %}
-<ol class="etapas-compra list-unstyled d-flex flex-wrap gap-4 mb-4" aria-label="Etapas da compra">
-  <li class="etapa ativa" aria-current="step"><span class="etapa__numero">1</span> Carrinho</li>
-  <li class="etapa"><span class="etapa__numero">2</span> Identificação e pagamento</li>
-  <li class="etapa"><span class="etapa__numero">3</span> Confirmação</li>
-</ol>
+{% include "loja/_etapas.html" with ativa=1 %}
 
 <h1 class="h2 fw-bold mb-4">Seu carrinho</h1>
 
@@ -102,13 +98,8 @@
           </div>
         </dl>
 
-        <button type="button" class="btn btn-primary btn-lg w-100" disabled aria-describedby="aviso-checkout">
-          Continuar para o pagamento
-        </button>
-        <p class="small text-body-secondary text-center mt-2 mb-3" id="aviso-checkout">
-          O pagamento chega no pacote 4.5.3 (checkout).
-        </p>
-        <p class="text-center mb-0">
+        <a class="btn btn-primary btn-lg w-100" href="{% url 'loja:checkout' %}">Continuar para o pagamento</a>
+        <p class="text-center mt-3 mb-0">
           <a class="link-acao" href="{% url 'loja:catalogo' %}">Continuar comprando</a>
         </p>
       </div>

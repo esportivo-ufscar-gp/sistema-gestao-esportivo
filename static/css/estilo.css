@@ -315,3 +315,69 @@ body {
   color: #2E6B0A;
   font-weight: 700;
 }
+
+/* ------------------------------------------------------------------ Checkout e confirmação */
+.etapa.feita .etapa__numero {
+  background-color: #D7EBC1;
+  color: var(--cor-acao-escura);
+}
+
+.opcao-selecionada,
+.opcao-pagamento {
+  border: 1px solid #CFCFCF;
+  border-radius: .5rem;
+  padding: .75rem 1rem .75rem 2.25rem;
+}
+
+.opcao-selecionada {
+  border-color: var(--cor-acao);
+}
+
+.opcao-selecionada .form-check-input:disabled,
+.opcao-selecionada .form-check-input:disabled ~ .form-check-label {
+  opacity: 1;
+}
+
+.opcao-pagamento {
+  min-width: 12rem;
+}
+
+.opcao-pagamento:has(.form-check-input:checked) {
+  border-color: var(--cor-acao);
+}
+
+.selo-confirmado {
+  align-items: center;
+  background-color: var(--cor-acao);
+  border-radius: 50%;
+  color: #fff;
+  display: inline-flex;
+  font-size: 1.5rem;
+  font-weight: 700;
+  height: 3rem;
+  justify-content: center;
+  width: 3rem;
+}
+
+.status-pedido {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: .85rem;
+  font-weight: 600;
+  padding: .15rem .7rem;
+}
+
+.status-pedido--aguardando_retirada {
+  background-color: #FFF1D6;
+  color: #5C3B00;
+}
+
+.status-pedido--retirada {
+  background-color: #E3F1D3;
+  color: #2E6B0A;
+}
+
+.status-pedido--cancelada {
+  background-color: #FDE2E2;
+  color: #B42318;
+}

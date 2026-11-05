@@ -120,6 +120,10 @@ def _finaliza(request, carrinho):
 def _cancela(request):
     venda = _objeto_do_pedido(Venda, request.POST.get("venda"))
 
+    # O PDV só cancela venda do balcão; o pedido online é cancelado na gestão de pedidos (4.5.4).
+    if venda.pedido_online:
+        raise Http404("venda não encontrada.")
+
     try:
         cancelar_venda(venda, request.user)
     except ErroDeVenda as erro:

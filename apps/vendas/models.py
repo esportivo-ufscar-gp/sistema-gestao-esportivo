@@ -2,6 +2,7 @@
 Modelos do módulo Vendas (PDV).
 
 Pacote 4.4: registro de venda (4.4.1) e cancelamento (4.4.2) na loja física.
+Pacote 4.5: pedido da loja online (4.5.3) e retirada (4.5.4), com o cliente e a data da retirada.
 
 Venda do PDV e pedido online são a mesma entidade, separados pelo campo `canal` (CLAUDE.md).
 O número é sequencial e compartilhado pelos dois canais: quem entrega o próximo número é o
@@ -38,6 +39,9 @@ class VendaQuerySet(models.QuerySet):
     def do_pdv(self):
         return self.filter(canal=CanalDeVenda.LOJA_FISICA)
 
+    def online(self):
+        return self.filter(canal=CanalDeVenda.ONLINE)
+
 
 class ContadorDeVendas(models.Model):
     """
@@ -73,7 +77,15 @@ class Venda(models.Model):
     )
     forma_pagamento = models.CharField("forma de pagamento", max_length=20, choices=FormaDePagamento.choices)
     total = models.DecimalField("total", max_digits=10, decimal_places=2, default=0)
-    # O campo `cliente` entra no pacote 4.5.3, depois que o modelo Cliente (4.6.1) existir.
+    cliente = models.ForeignKey(
+        "clientes.Cliente",
+        on_delete=models.PROTECT,  # cliente com pedido não é excluído
+        null=True,
+        blank=True,
+        related_name="pedidos",
+        verbose_name="cliente",
+        help_text="Só nos pedidos da loja online.",
+    )
     vendedor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -84,6 +96,7 @@ class Venda(models.Model):
         help_text="Só nas vendas do PDV.",
     )
     criado_em = models.DateTimeField("criado em", auto_now_add=True)
+    retirada_em = models.DateTimeField("retirada em", null=True, blank=True)
     cancelada_em = models.DateTimeField("cancelada em", null=True, blank=True)
     cancelada_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -105,6 +118,11 @@ class Venda(models.Model):
                 condition=models.Q(total__gte=0),
                 name="venda_total_nao_negativo",
             ),
+            # Pedido online sempre tem cliente; a venda do balcão não identifica o cliente.
+            models.CheckConstraint(
+                condition=~models.Q(canal=CanalDeVenda.ONLINE) | models.Q(cliente__isnull=False),
+                name="venda_online_tem_cliente",
+            ),
         ]
 
     def __str__(self):
@@ -118,6 +136,10 @@ class Venda(models.Model):
     @property
     def cancelada(self):
         return self.status == StatusDeVenda.CANCELADA
+
+    @property
+    def pedido_online(self):
+        return self.canal == CanalDeVenda.ONLINE
 
 
 class ItemVenda(models.Model):
