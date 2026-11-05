@@ -36,6 +36,7 @@ PERMISSOES_POR_PERFIL = {
         "estoque": TODAS_AS_ACOES,
         "vendas": TODAS_AS_ACOES,
         "clientes": TODAS_AS_ACOES,
+        "loja": TODAS_AS_ACOES,  # gestão dos pedidos online (4.5.4)
     },
     # O vendedor trabalha no PDV; no Admin ele só consulta.
     PERFIL_VENDEDOR: {"produtos": SOMENTE_VER, "vendas": SOMENTE_VER},

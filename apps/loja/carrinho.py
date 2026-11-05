@@ -113,6 +113,12 @@ class CarrinhoDaLoja:
 
         return sum((linha["subtotal"] for linha in linhas), Decimal("0.00"))
 
+    def pares(self, linhas=None):
+        """Itens no formato (produto, quantidade) que os serviços de venda e de estoque esperam."""
+        linhas = self.linhas() if linhas is None else linhas
+
+        return [(linha["produto"], linha["quantidade"]) for linha in linhas]
+
     def _grava(self):
         self.sessao[CHAVE_NA_SESSAO] = self.quantidades
         self.sessao.modified = True

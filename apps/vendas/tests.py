@@ -2,8 +2,10 @@
 Testes unitários do módulo Vendas (PDV).
 
 Pacote 4.4: registro de venda (4.4.1) e cancelamento (4.4.2) na loja física.
+Pacote 4.5: pedido online (4.5.3), retirada e cancelamento do pedido (4.5.4).
 
-Cada critério de aceite das histórias HU08 e HU09 tem pelo menos um teste. O teste de
+Cada critério de aceite das histórias HU08, HU09, HU12 e HU13 (no que toca o serviço de vendas)
+tem pelo menos um teste. O teste de
 numeração simultânea usa threads e por isso precisa de TransactionTestCase e do PostgreSQL;
 no SQLite ele é pulado, porque o banco não tem bloqueio de linha.
 """
@@ -13,23 +15,30 @@ from decimal import Decimal
 from unittest import mock, skipUnless
 
 from django.contrib.auth.models import Group, User
+from django.core.management import call_command
 from django.db import IntegrityError, connection, connections, transaction
 from django.db.models import ProtectedError
 from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 
+from apps.clientes.models import Cliente
 from apps.contas.services import PERFIL_ADMINISTRADOR, PERFIL_CLIENTE, PERFIL_ESTOQUISTA, PERFIL_VENDEDOR
 from apps.estoque.models import MovimentoEstoque, TipoDeMovimento
 from apps.estoque.services import SaldoInsuficiente
 from apps.produtos.models import Categoria, Produto
 
 from . import services
-from .models import CanalDeVenda, FormaDePagamento, ItemVenda, StatusDeVenda, Venda
+from .models import CanalDeVenda, ContadorDeVendas, FormaDePagamento, ItemVenda, StatusDeVenda, Venda
 from .services import (
     FormaDePagamentoInvalida,
+    PedidoSemCliente,
+    StatusNaoPermite,
     VendaJaCancelada,
     VendaSemItens,
     cancelar_venda,
+    marcar_retirado,
+    registrar_pedido_online,
     registrar_venda_pdv,
 )
 
@@ -615,3 +624,207 @@ class VendaAdminTests(TestCase):
 
         self.assertEqual(adicionar.status_code, 403)
         self.assertEqual(excluir.status_code, 403)
+
+
+# ------------------------------------------------- HU12 Pedido da loja online (4.5.3)
+def cria_cliente(email="marina@exemplo.com", usuario=None):
+    return Cliente.objects.create(
+        nome="Marina Silva", email=email, telefone="(16) 99888-7766",
+        usuario=usuario, consentimento_em=timezone.now(),
+    )
+
+
+class PedidoOnlineTests(TestCase):
+    """HU12: a confirmação gera um pedido numerado, online, aguardando retirada, e baixa o estoque."""
+
+    def setUp(self):
+        self.vendedor = cria_usuario("vendedor")
+        self.tenis = cria_produto(saldo=10)
+        self.garrafa = cria_produto("100120", "Garrafa térmica 750 ml", "49.90", saldo=5)
+        self.cliente = cria_cliente()
+
+    def test_pedido_tem_canal_online_status_aguardando_retirada_e_cliente(self):
+        pedido = registrar_pedido_online(self.cliente, [(self.tenis, 1), (self.garrafa, 2)], FormaDePagamento.PIX)
+
+        self.assertEqual(pedido.canal, CanalDeVenda.ONLINE)
+        self.assertEqual(pedido.status, StatusDeVenda.AGUARDANDO_RETIRADA)
+        self.assertEqual(pedido.cliente, self.cliente)
+        self.assertIsNone(pedido.vendedor)
+        self.assertIsNone(pedido.retirada_em)
+        self.assertEqual(pedido.total, Decimal("449.70"))
+        self.assertEqual(pedido.itens.count(), 2)
+
+    def test_numero_continua_a_sequencia_do_pdv(self):
+        primeira = registrar_venda_pdv(self.vendedor, [(self.tenis, 1)], FormaDePagamento.DINHEIRO)
+        pedido = registrar_pedido_online(self.cliente, [(self.tenis, 1)], FormaDePagamento.CARTAO)
+        segunda = registrar_venda_pdv(self.vendedor, [(self.tenis, 1)], FormaDePagamento.PIX)
+
+        self.assertEqual([primeira.numero, pedido.numero, segunda.numero], [1, 2, 3])
+        self.assertEqual(pedido.numero_formatado, "#0002")
+
+    def test_preco_e_copiado_no_momento_da_confirmacao(self):
+        pedido = registrar_pedido_online(self.cliente, [(self.tenis, 2)], FormaDePagamento.PIX)
+        Produto.objects.filter(pk=self.tenis.pk).update(preco=Decimal("399.90"))
+
+        item = pedido.itens.get()
+        self.assertEqual(item.preco_unitario, Decimal("349.90"))
+        self.assertEqual(pedido.total, Decimal("699.80"))
+
+    def test_estoque_e_baixado_com_os_movimentos_ligados_ao_pedido(self):
+        pedido = registrar_pedido_online(self.cliente, [(self.tenis, 3)], FormaDePagamento.PIX)
+
+        self.tenis.refresh_from_db()
+        movimento = MovimentoEstoque.objects.get()
+        self.assertEqual(self.tenis.estoque_atual, 7)
+        self.assertEqual(movimento.tipo, TipoDeMovimento.SAIDA_VENDA)
+        self.assertEqual(movimento.venda, pedido)
+        self.assertEqual(movimento.quantidade, 3)
+        self.assertEqual(movimento.saldo_apos, 7)
+
+    def test_cartao_e_pix_sao_aceitos(self):
+        for forma in (FormaDePagamento.CARTAO, FormaDePagamento.PIX):
+            with self.subTest(forma=forma):
+                pedido = registrar_pedido_online(self.cliente, [(self.tenis, 1)], forma)
+                self.assertEqual(pedido.forma_pagamento, forma)
+
+    def test_dinheiro_e_recusado_no_canal_online(self):
+        for forma in (FormaDePagamento.DINHEIRO, "", "boleto"):
+            with self.subTest(forma=forma):
+                with self.assertRaisesMessage(FormaDePagamentoInvalida, "cartão de crédito ou PIX"):
+                    registrar_pedido_online(self.cliente, [(self.tenis, 1)], forma)
+
+        self.assertFalse(Venda.objects.exists())
+        self.tenis.refresh_from_db()
+        self.assertEqual(self.tenis.estoque_atual, 10)
+
+    def test_sem_saldo_nada_e_gravado(self):
+        with self.assertRaises(SaldoInsuficiente) as erro:
+            registrar_pedido_online(self.cliente, [(self.tenis, 1), (self.garrafa, 6)], FormaDePagamento.PIX)
+
+        self.assertIn("Garrafa térmica 750 ml", str(erro.exception))
+        self.assertFalse(Venda.objects.exists())
+        self.assertFalse(ItemVenda.objects.exists())
+        self.assertFalse(MovimentoEstoque.objects.exists())
+        self.tenis.refresh_from_db()
+        self.assertEqual(self.tenis.estoque_atual, 10)
+        self.assertEqual(ContadorDeVendas.objects.get(pk=1).proximo_numero, 1)
+
+    def test_pedido_sem_cliente_ou_sem_itens_e_recusado(self):
+        with self.assertRaises(PedidoSemCliente):
+            registrar_pedido_online(None, [(self.tenis, 1)], FormaDePagamento.PIX)
+        with self.assertRaises(VendaSemItens):
+            registrar_pedido_online(self.cliente, [], FormaDePagamento.PIX)
+
+        self.assertFalse(Venda.objects.exists())
+
+    def test_banco_recusa_pedido_online_sem_cliente(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Venda.objects.create(numero=99, canal=CanalDeVenda.ONLINE, forma_pagamento=FormaDePagamento.PIX)
+
+    def test_venda_do_pdv_continua_sem_cliente(self):
+        venda = registrar_venda_pdv(self.vendedor, [(self.tenis, 1)], FormaDePagamento.DINHEIRO)
+
+        self.assertIsNone(venda.cliente)
+
+    def test_cliente_com_pedido_nao_pode_ser_excluido(self):
+        registrar_pedido_online(self.cliente, [(self.tenis, 1)], FormaDePagamento.PIX)
+
+        with self.assertRaises(ProtectedError):
+            with transaction.atomic():
+                self.cliente.delete()
+
+
+# ------------------------------------------------- HU13 Retirada e cancelamento (4.5.4)
+class RetiradaECancelamentoDoPedidoTests(TestCase):
+    """HU13: aguardando retirada -> retirado ou cancelado; cancelar devolve o estoque."""
+
+    def setUp(self):
+        self.gerente = cria_usuario("gerente")
+        self.tenis = cria_produto(saldo=10)
+        self.pedido = registrar_pedido_online(cria_cliente(), [(self.tenis, 2)], FormaDePagamento.PIX)
+
+    def test_marcar_retirado_registra_status_e_data(self):
+        antes = timezone.now()
+
+        retirado = marcar_retirado(self.pedido, self.gerente)
+
+        self.assertEqual(retirado.status, StatusDeVenda.RETIRADA)
+        self.assertGreaterEqual(retirado.retirada_em, antes)
+        self.pedido.refresh_from_db()
+        self.assertEqual(self.pedido.status, StatusDeVenda.RETIRADA)
+
+    def test_marcar_retirado_so_a_partir_de_aguardando_retirada(self):
+        marcar_retirado(self.pedido, self.gerente)
+        with self.assertRaisesMessage(StatusNaoPermite, "está retirada"):
+            marcar_retirado(self.pedido, self.gerente)
+
+        outro = registrar_pedido_online(cria_cliente("outro@exemplo.com"), [(self.tenis, 1)], FormaDePagamento.PIX)
+        cancelar_venda(outro, self.gerente)
+        with self.assertRaisesMessage(StatusNaoPermite, "está cancelada"):
+            marcar_retirado(outro, self.gerente)
+
+        outro.refresh_from_db()
+        self.assertIsNone(outro.retirada_em)
+
+    def test_venda_do_pdv_nao_tem_retirada(self):
+        venda = registrar_venda_pdv(self.gerente, [(self.tenis, 1)], FormaDePagamento.DINHEIRO)
+
+        with self.assertRaisesMessage(StatusNaoPermite, "é do balcão"):
+            marcar_retirado(venda, self.gerente)
+
+    def test_cancelar_pedido_aguardando_retirada_devolve_o_estoque(self):
+        cancelado = cancelar_venda(self.pedido, self.gerente)
+
+        self.tenis.refresh_from_db()
+        estorno = MovimentoEstoque.objects.get(tipo=TipoDeMovimento.ESTORNO)
+        self.assertEqual(self.tenis.estoque_atual, 10)
+        self.assertEqual(cancelado.status, StatusDeVenda.CANCELADA)
+        self.assertEqual(cancelado.cancelada_por, self.gerente)
+        self.assertEqual(estorno.venda, self.pedido)
+        self.assertEqual(estorno.motivo, f"Cancelamento do pedido {self.pedido}")
+
+    def test_pedido_retirado_nao_pode_ser_cancelado(self):
+        marcar_retirado(self.pedido, self.gerente)
+
+        with self.assertRaisesMessage(StatusNaoPermite, "já foi retirado e não pode ser cancelado"):
+            cancelar_venda(self.pedido, self.gerente)
+
+        self.tenis.refresh_from_db()
+        self.pedido.refresh_from_db()
+        self.assertEqual(self.tenis.estoque_atual, 8)
+        self.assertEqual(self.pedido.status, StatusDeVenda.RETIRADA)
+        self.assertFalse(MovimentoEstoque.objects.filter(tipo=TipoDeMovimento.ESTORNO).exists())
+
+    def test_pedido_cancelado_nao_e_cancelado_de_novo(self):
+        cancelar_venda(self.pedido, self.gerente)
+
+        with self.assertRaisesMessage(VendaJaCancelada, "O pedido #0001 já está cancelado."):
+            cancelar_venda(self.pedido, self.gerente)
+
+    def test_pedidos_cancelados_ficam_fora_de_validas(self):
+        retirado = registrar_pedido_online(cria_cliente("r@exemplo.com"), [(self.tenis, 1)], FormaDePagamento.PIX)
+        marcar_retirado(retirado, self.gerente)
+        venda_pdv = registrar_venda_pdv(self.gerente, [(self.tenis, 1)], FormaDePagamento.PIX)
+
+        cancelar_venda(self.pedido, self.gerente)
+
+        self.assertEqual(set(Venda.objects.validas()), {retirado, venda_pdv})
+        self.assertEqual(set(Venda.objects.online()), {self.pedido, retirado})
+
+
+class PdvNaoCancelaPedidoOnlineTests(TestCase):
+    """O PDV cancela só as vendas do balcão; o pedido online é cancelado na gestão de pedidos."""
+
+    def test_cancelar_pedido_online_pela_tela_do_pdv_da_404(self):
+        call_command("criar_perfis", verbosity=0)
+        vendedor = cria_usuario("vendedor", PERFIL_VENDEDOR)
+        tenis = cria_produto(saldo=10)
+        pedido = registrar_pedido_online(cria_cliente(), [(tenis, 1)], FormaDePagamento.PIX)
+        self.client.force_login(vendedor)
+
+        resposta = self.client.post(reverse("vendas:pdv"), {"acao": "cancelar", "venda": pedido.pk})
+
+        self.assertEqual(resposta.status_code, 404)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.status, StatusDeVenda.AGUARDANDO_RETIRADA)

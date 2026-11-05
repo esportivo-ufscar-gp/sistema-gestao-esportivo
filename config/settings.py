@@ -149,3 +149,9 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_URL = "media/"          # imagens de produtos (pacote 4.2.2)
 MEDIA_ROOT = BASE_DIR / "media"
+
+# ------------------------------------------------------------------ Loja online
+# Mostrados no checkout e na confirmação do pedido (pacote 4.5.3): a única entrega é a
+# retirada na loja. Troque os textos provisórios pelos dados reais da loja.
+LOJA_ENDERECO = "[Endereço da loja]"
+LOJA_HORARIO = "[Horário de funcionamento]"

@@ -1,0 +1,12 @@
+{% comment %}Etapas da compra (pacote 4.5). Uso: include com ativa=1, 2 ou 3.{% endcomment %}
+<ol class="etapas-compra list-unstyled d-flex flex-wrap gap-4 mb-4" aria-label="Etapas da compra">
+  <li class="etapa{% if ativa == 1 %} ativa{% elif ativa > 1 %} feita{% endif %}"{% if ativa == 1 %} aria-current="step"{% endif %}>
+    <span class="etapa__numero">1</span> Carrinho
+  </li>
+  <li class="etapa{% if ativa == 2 %} ativa{% elif ativa > 2 %} feita{% endif %}"{% if ativa == 2 %} aria-current="step"{% endif %}>
+    <span class="etapa__numero">2</span> Identificação e pagamento
+  </li>
+  <li class="etapa{% if ativa == 3 %} ativa{% endif %}"{% if ativa == 3 %} aria-current="step"{% endif %}>
+    <span class="etapa__numero">3</span> Confirmação
+  </li>
+</ol>

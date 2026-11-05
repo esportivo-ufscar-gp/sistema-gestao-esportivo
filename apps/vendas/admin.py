@@ -34,8 +34,8 @@ class VendaAdmin(admin.ModelAdmin):
     date_hierarchy = "criado_em"
     inlines = [ItemVendaInline]
     readonly_fields = (
-        "numero", "canal", "status", "forma_pagamento", "total", "vendedor",
-        "criado_em", "cancelada_em", "cancelada_por",
+        "numero", "canal", "status", "forma_pagamento", "total", "vendedor", "cliente",
+        "criado_em", "retirada_em", "cancelada_em", "cancelada_por",
     )
 
     @admin.display(description="número", ordering="numero")

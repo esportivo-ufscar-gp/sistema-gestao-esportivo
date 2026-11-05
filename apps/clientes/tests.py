@@ -2,9 +2,12 @@
 Testes unitários do módulo Clientes.
 
 Pacote 4.6.1: cadastro com consentimento LGPD (HU14).
+Pacote 4.5.3: identificação do cliente no checkout da loja online (HU12).
 """
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser, Group, User
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
@@ -12,11 +15,21 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.contas.services import PERFIL_CLIENTE, perfil_do_usuario
+from apps.contas.services import PERFIL_CLIENTE, PERFIL_ESTOQUISTA, PERFIL_VENDEDOR, perfil_do_usuario
 from .admin import ClienteAdmin
 from .forms import FormularioDeCadastroCliente
 from .models import Cliente
-from .services import cadastrar_cliente
+from .services import (
+    ConsentimentoObrigatorio,
+    ContaSemCadastroDeCliente,
+    EmailDeUmaConta,
+    EquipeNaoCompraNaLoja,
+    ErroDeIdentificacao,
+    cadastrar_cliente,
+    cliente_da_conta,
+    cliente_do_checkout,
+    identificar_visitante,
+)
 
 Usuario = get_user_model()
 
@@ -167,3 +180,93 @@ class AdminClienteTests(TestCase):
         self.assertEqual(ClienteAdmin.list_display, ("nome", "email", "telefone", "consentimento_em", "criado_em"))
         self.assertEqual(ClienteAdmin.search_fields, ("nome", "email"))
         self.assertEqual(ClienteAdmin.readonly_fields, ("consentimento_em", "criado_em"))
+
+
+# ------------------------------------------------------------------ Checkout da loja (4.5.3)
+class IdentificacaoNoCheckoutTests(TestCase):
+    """HU12: quem compra pela loja online é identificado sem fazer pedido no nome de outra pessoa."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("criar_perfis", verbosity=0)
+
+    def _visitante(self, **campos):
+        dados = {"nome": "Marina Silva", "email": "marina@exemplo.com", "telefone": "(16) 99888-7766",
+                 "consentiu": True}
+        return identificar_visitante(**(dados | campos))
+
+    def test_email_novo_cria_cliente_sem_conta_com_consentimento_do_servidor(self):
+        antes = timezone.now()
+
+        cliente = self._visitante(email="  Marina@Exemplo.COM ")
+
+        self.assertIsNone(cliente.usuario)
+        self.assertEqual(cliente.email, "marina@exemplo.com")
+        self.assertEqual(cliente.nome, "Marina Silva")
+        self.assertGreaterEqual(cliente.consentimento_em, antes)
+        self.assertLessEqual(cliente.consentimento_em, timezone.now())
+        self.assertFalse(User.objects.exists())
+
+    def test_sem_consentimento_nada_e_gravado(self):
+        with self.assertRaises(ConsentimentoObrigatorio):
+            self._visitante(consentiu=False)
+
+        self.assertFalse(Cliente.objects.exists())
+
+    def test_email_de_cliente_sem_conta_reaproveita_o_cadastro_e_atualiza_o_consentimento(self):
+        primeiro = self._visitante()
+        Cliente.objects.filter(pk=primeiro.pk).update(consentimento_em=timezone.now() - timedelta(days=30))
+
+        de_novo = self._visitante(email="MARINA@exemplo.com")
+
+        self.assertEqual(de_novo.pk, primeiro.pk)
+        self.assertEqual(Cliente.objects.count(), 1)
+        self.assertGreater(de_novo.consentimento_em, timezone.now() - timedelta(minutes=1))
+
+    def test_email_de_uma_conta_exige_login(self):
+        cadastrar_cliente("Marina Silva", "marina@exemplo.com", "1699999999", "SenhaForte123!")
+        User.objects.create_user("equipe", "vendedor@exemplo.com", "SenhaForte123!")
+
+        for email in ("MARINA@exemplo.com", "vendedor@exemplo.com"):
+            with self.subTest(email=email):
+                with self.assertRaisesMessage(EmailDeUmaConta, "Entre na conta"):
+                    self._visitante(email=email)
+
+        self.assertEqual(Cliente.objects.count(), 1)
+
+    def test_cliente_ligado_a_uma_conta_com_outro_email_tambem_exige_login(self):
+        usuario = User.objects.create_user("marina", "outro@exemplo.com", "SenhaForte123!")
+        Cliente.objects.create(nome="Marina", email="marina@exemplo.com", telefone="1",
+                               usuario=usuario, consentimento_em=timezone.now())
+
+        with self.assertRaises(EmailDeUmaConta):
+            self._visitante()
+
+    def test_cliente_logado_usa_o_proprio_cadastro(self):
+        usuario, cliente = cadastrar_cliente("Marina Silva", "marina@exemplo.com", "1699999999", "SenhaForte123!")
+
+        self.assertEqual(cliente_da_conta(usuario), cliente)
+        self.assertEqual(cliente_do_checkout(usuario), cliente)
+
+    def test_equipe_nao_faz_pedido_pela_loja(self):
+        administrador = User.objects.create_superuser("gerente", "gerente@exemplo.com", "SenhaForte123!")
+        equipe = [administrador]
+        for perfil in (PERFIL_VENDEDOR, PERFIL_ESTOQUISTA):
+            usuario = User.objects.create_user(perfil, f"{perfil}@exemplo.com", "SenhaForte123!")
+            usuario.groups.add(Group.objects.get(name=perfil))
+            equipe.append(usuario)
+
+        for usuario in equipe:
+            with self.subTest(usuario=usuario.username):
+                with self.assertRaisesMessage(EquipeNaoCompraNaLoja, "Contas da equipe"):
+                    cliente_da_conta(usuario)
+
+    def test_conta_sem_cadastro_de_cliente_e_avisada(self):
+        usuario = User.objects.create_user("avulso", "avulso@exemplo.com", "SenhaForte123!")
+
+        with self.assertRaises(ContaSemCadastroDeCliente):
+            cliente_da_conta(usuario)
+
+    def test_visitante_sem_dados_e_recusado(self):
+        with self.assertRaises(ErroDeIdentificacao):
+            cliente_do_checkout(AnonymousUser())

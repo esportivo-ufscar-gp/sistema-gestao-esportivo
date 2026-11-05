@@ -1,0 +1,53 @@
+{% extends "loja/base_loja.html" %}
+{% load loja %}
+
+{% block titulo %}Pedido {{ venda.numero_formatado }} confirmado | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+{% include "loja/_etapas.html" with ativa=3 %}
+
+<div class="row g-4 align-items-start">
+  <div class="col-12 col-lg-8">
+    <section class="card border-0 shadow-sm">
+      <div class="card-body p-4 p-md-5">
+        <p class="selo-confirmado mb-3" aria-hidden="true">✓</p>
+        <h1 class="h2 fw-bold mb-1">Pedido confirmado</h1>
+        <p class="fs-5 mb-4">Pedido <strong>{{ venda.numero_formatado }}</strong></p>
+
+        <p class="alert alert-info small">
+          Ambiente de demonstração: o pagamento é simulado e nenhuma cobrança real foi realizada.
+        </p>
+
+        <dl class="row mb-0">
+          <dt class="col-sm-4 fw-normal text-body-secondary">Status</dt>
+          <dd class="col-sm-8">
+            <span class="status-pedido status-pedido--{{ venda.status }}">{{ venda.get_status_display }}</span>
+          </dd>
+
+          <dt class="col-sm-4 fw-normal text-body-secondary">Retirada</dt>
+          <dd class="col-sm-8">
+            Retirada na loja · <span class="texto-gratis">Grátis</span>
+            <span class="d-block small text-body-secondary">{{ loja_endereco }} · {{ loja_horario }}</span>
+          </dd>
+
+          <dt class="col-sm-4 fw-normal text-body-secondary">Forma de pagamento</dt>
+          <dd class="col-sm-8">{{ forma_pagamento }}</dd>
+
+          <dt class="col-sm-4 fw-normal text-body-secondary">Cliente</dt>
+          <dd class="col-sm-8">{{ venda.cliente.nome }} · {{ venda.cliente.email }}</dd>
+        </dl>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <aside class="card border-0 shadow-sm resumo-pedido">
+      <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Resumo do pedido</h2>
+        {% include "loja/_resumo_itens.html" with itens=itens total=venda.total %}
+        <a class="btn btn-primary btn-lg w-100" href="{% url 'loja:catalogo' %}">Continuar comprando</a>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock %}
