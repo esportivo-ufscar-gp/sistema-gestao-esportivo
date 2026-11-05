@@ -1,10 +1,11 @@
 from django.db import DatabaseError, connection
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 
 
 def home(request):
-    return render(request, "core/home.html")
+    """A página inicial é o catálogo da loja online (pacote 4.5.1)."""
+    return redirect("loja:catalogo")
 
 
 def banco_disponivel():

@@ -31,9 +31,9 @@ class EntrarView(LoginView):
 @login_required
 def painel(request):
     """
-    Página inicial provisória de vendedor, estoquista e cliente.
+    Página de quem ainda não tem perfil (ou do administrador sem acesso ao Admin).
 
-    Será substituída pelo PDV (4.4.1), pelo painel de estoque (4.3.3) e pelo catálogo da
-    loja online (4.5.1); o mapeamento fica em services.DESTINO_POR_PERFIL.
+    Cada perfil tem a sua página inicial (PDV, painel de estoque, catálogo da loja online);
+    o mapeamento fica em services.DESTINO_POR_PERFIL.
     """
     return render(request, "contas/painel.html", {"perfil": perfil_do_usuario(request.user)})

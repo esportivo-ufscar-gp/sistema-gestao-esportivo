@@ -84,6 +84,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.loja.context_processors.carrinho",
             ],
         },
     },
@@ -126,7 +127,7 @@ AUTHENTICATION_BACKENDS = [
 
 LOGIN_URL = "contas:entrar"
 LOGIN_REDIRECT_URL = "contas:painel"   # usado quando o perfil não tem destino próprio
-LOGOUT_REDIRECT_URL = "core:home"
+LOGOUT_REDIRECT_URL = "loja:catalogo"
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

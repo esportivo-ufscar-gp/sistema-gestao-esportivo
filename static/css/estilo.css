@@ -1,1 +1,317 @@
-/* Estilos próprios do sistema. O Bootstrap cuida da base e da responsividade. */
+/* Estilos próprios do sistema. O Bootstrap cuida da base e da responsividade.
+ *
+ * Identidade visual dos protótipos de tela (pacote 4.5): cabeçalho verde-escuro, botões de
+ * ação verdes, fundo cinza-claro e fonte Manrope. Vale para todo o sistema; aqui só mudam
+ * cores e tipografia, nunca a estrutura das telas.
+ */
+
+/* ------------------------------------------------------------------ Cores e fonte */
+:root {
+  --cor-cabecalho: #00231D;
+  --cor-cabecalho-destaque: #0E3A31;
+  --cor-acao: #4F8406;
+  --cor-acao-escura: #416D05;
+  --cor-acao-viva: #7BC91F;
+  --cor-fundo: #F5F5F5;
+  --cor-categoria: #2F7A6B;
+
+  --bs-body-font-family: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --bs-body-bg: var(--cor-fundo);
+  --bs-primary: var(--cor-acao);
+  --bs-primary-rgb: 79, 132, 6;
+  --bs-link-color: var(--cor-acao-escura);
+  --bs-link-color-rgb: 65, 109, 5;
+  --bs-link-hover-color: var(--cor-cabecalho);
+  --bs-link-hover-color-rgb: 0, 35, 29;
+}
+
+body {
+  background-color: var(--cor-fundo);
+}
+
+/* O cabeçalho das telas internas (PDV, estoque, painel) também fica verde-escuro. */
+.navbar.bg-dark {
+  background-color: var(--cor-cabecalho) !important;
+}
+
+/* Botões de ação: o "dark" das telas já existentes e o "primary" das novas viram verdes. */
+.btn-primary,
+.btn-dark {
+  --bs-btn-color: #fff;
+  --bs-btn-bg: var(--cor-acao);
+  --bs-btn-border-color: var(--cor-acao);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--cor-acao-escura);
+  --bs-btn-hover-border-color: var(--cor-acao-escura);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--cor-acao-escura);
+  --bs-btn-active-border-color: var(--cor-acao-escura);
+  --bs-btn-disabled-color: #fff;
+  --bs-btn-disabled-bg: var(--cor-acao);
+  --bs-btn-disabled-border-color: var(--cor-acao);
+  --bs-btn-focus-shadow-rgb: 79, 132, 6;
+  font-weight: 700;
+}
+
+.form-control:focus,
+.form-select:focus,
+.form-check-input:focus {
+  border-color: var(--cor-acao);
+  box-shadow: 0 0 0 .25rem rgba(79, 132, 6, .25);
+}
+
+.form-check-input:checked {
+  background-color: var(--cor-acao);
+  border-color: var(--cor-acao);
+}
+
+/* ------------------------------------------------------------------ Cabeçalho da loja */
+.cabecalho-loja {
+  background-color: var(--cor-cabecalho);
+  color: #fff;
+}
+
+.cabecalho-loja__marca {
+  color: #fff;
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.cabecalho-loja__marca:hover {
+  color: #fff;
+}
+
+.cabecalho-loja__busca {
+  min-width: 14rem;
+  max-width: 32rem;
+}
+
+.btn-busca {
+  background-color: var(--cor-acao-viva);
+  color: var(--cor-cabecalho);
+}
+
+.btn-busca:hover,
+.btn-busca:focus-visible {
+  background-color: #8FDB33;
+  color: var(--cor-cabecalho);
+}
+
+.cabecalho-loja__usuario,
+.cabecalho-loja__link,
+.cabecalho-loja__link.btn-link {
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cabecalho-loja__link:hover,
+.cabecalho-loja__link.btn-link:hover {
+  color: var(--cor-acao-viva);
+}
+
+.cabecalho-loja__carrinho {
+  background-color: var(--cor-cabecalho-destaque);
+  color: #fff;
+  font-weight: 700;
+}
+
+.cabecalho-loja__carrinho:hover,
+.cabecalho-loja__carrinho:focus-visible {
+  background-color: #17503F;
+  color: #fff;
+}
+
+/* Faixa branca com os filtros de categoria, logo abaixo do cabeçalho. */
+.faixa-categorias {
+  background-color: #fff;
+  border-bottom: 1px solid #E6E6E6;
+}
+
+.filtro-categoria {
+  border: 1px solid #CFCFCF;
+  border-radius: 999px;
+  color: #1B1B1B;
+  font-weight: 600;
+  padding: .4rem 1rem;
+  text-decoration: none;
+}
+
+.filtro-categoria:hover {
+  border-color: var(--cor-cabecalho);
+  color: var(--cor-cabecalho);
+}
+
+.filtro-categoria.ativo {
+  background-color: var(--cor-cabecalho);
+  border-color: var(--cor-cabecalho);
+  color: #fff;
+}
+
+.rodape-loja {
+  background-color: var(--cor-cabecalho);
+  color: #fff;
+}
+
+.rodape-loja a {
+  color: #fff;
+}
+
+/* ------------------------------------------------------------------ Vitrine */
+.cartao-produto {
+  border: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+  overflow: hidden;
+}
+
+.cartao-produto__foto {
+  aspect-ratio: 16 / 10;
+  max-width: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.sem-foto {
+  align-items: center;
+  background-color: #E2E2E2;
+  color: #6B6B6B;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  justify-content: center;
+}
+
+.rotulo-categoria {
+  color: var(--cor-categoria);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.preco {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.disponibilidade {
+  font-size: .82rem;
+  font-weight: 600;
+}
+
+.disponibilidade--em_estoque {
+  color: #2E6B0A;
+}
+
+.disponibilidade--ultimas_unidades,
+.disponibilidade--esgotado {
+  border-radius: 999px;
+  display: inline-block;
+  padding: .15rem .6rem;
+}
+
+.disponibilidade--ultimas_unidades {
+  background-color: #FFF1D6;
+  color: #5C3B00;
+}
+
+.disponibilidade--ultimas_unidades::before {
+  background-color: #F59E0B;
+  border-radius: 50%;
+  content: "";
+  display: inline-block;
+  height: .45rem;
+  margin-right: .35rem;
+  vertical-align: middle;
+  width: .45rem;
+}
+
+.disponibilidade--esgotado {
+  background-color: #FDE2E2;
+  color: #B42318;
+}
+
+.btn-indisponivel,
+.btn-indisponivel:disabled {
+  background-color: #E4E4E4;
+  border-color: #E4E4E4;
+  color: #6B6B6B;
+  font-weight: 700;
+  opacity: 1;
+}
+
+.link-acao {
+  color: var(--cor-acao-escura);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------------------------ Carrinho */
+.etapa {
+  align-items: center;
+  color: #6B6B6B;
+  display: flex;
+  gap: .6rem;
+}
+
+.etapa__numero {
+  align-items: center;
+  background-color: #E2E2E2;
+  border-radius: 50%;
+  color: #1B1B1B;
+  display: inline-flex;
+  font-size: .85rem;
+  font-weight: 700;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.etapa.ativa {
+  color: #1B1B1B;
+  font-weight: 600;
+}
+
+.etapa.ativa .etapa__numero {
+  background-color: var(--cor-acao);
+  color: #fff;
+}
+
+.item-carrinho__foto {
+  border-radius: .25rem;
+  flex: 0 0 auto;
+  height: 5.5rem;
+  object-fit: cover;
+  width: 5.5rem;
+}
+
+.btn-quantidade {
+  border: 1px solid #CFCFCF;
+  font-size: 1.1rem;
+  height: 2.5rem;
+  width: 2.5rem;
+}
+
+.quantidade {
+  font-weight: 600;
+  min-width: 2rem;
+  text-align: center;
+}
+
+.subtotal-item {
+  min-width: 7rem;
+}
+
+.link-remover {
+  color: #B42318;
+  text-decoration: none;
+}
+
+.link-remover:hover {
+  color: #8A1A12;
+}
+
+.texto-gratis {
+  color: #2E6B0A;
+  font-weight: 700;
+}
