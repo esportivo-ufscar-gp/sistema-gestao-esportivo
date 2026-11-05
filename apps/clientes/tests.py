@@ -147,7 +147,7 @@ class ViewCadastroClienteTests(TestCase):
             },
         )
 
-        self.assertRedirects(resposta, reverse("contas:painel"))
+        self.assertRedirects(resposta, reverse("loja:catalogo"))
         self.assertTrue(Cliente.objects.filter(email="marina@exemplo.com").exists())
         self.assertIn("_auth_user_id", self.client.session)
 

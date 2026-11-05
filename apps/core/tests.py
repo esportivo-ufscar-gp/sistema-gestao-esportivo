@@ -1,5 +1,6 @@
 from unittest import mock
 
+from django.contrib.auth.models import User
 from django.test import TestCase
 from django.urls import reverse
 
@@ -20,9 +21,15 @@ class HealthCheckTests(TestCase):
 
 
 class HomeTests(TestCase):
-    def test_pagina_inicial_usa_o_template_base(self):
+    def test_pagina_inicial_redireciona_para_o_catalogo(self):
         resposta = self.client.get(reverse("core:home"))
 
-        self.assertEqual(resposta.status_code, 200)
-        self.assertTemplateUsed(resposta, "core/home.html")
-        self.assertTemplateUsed(resposta, "base.html")
+        self.assertRedirects(resposta, reverse("loja:catalogo"))
+
+    def test_pagina_inicial_redireciona_tambem_quem_entrou(self):
+        usuario = User.objects.create_user("cliente", "cliente@exemplo.com", "senha-de-teste-123")
+        self.client.force_login(usuario)
+
+        resposta = self.client.get(reverse("core:home"))
+
+        self.assertRedirects(resposta, reverse("loja:catalogo"))

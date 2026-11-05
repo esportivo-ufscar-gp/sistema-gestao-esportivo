@@ -1,0 +1,126 @@
+{% extends "loja/base_loja.html" %}
+{% load loja %}
+
+{% block titulo %}Carrinho | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<ol class="etapas-compra list-unstyled d-flex flex-wrap gap-4 mb-4" aria-label="Etapas da compra">
+  <li class="etapa ativa" aria-current="step"><span class="etapa__numero">1</span> Carrinho</li>
+  <li class="etapa"><span class="etapa__numero">2</span> Identificação e pagamento</li>
+  <li class="etapa"><span class="etapa__numero">3</span> Confirmação</li>
+</ol>
+
+<h1 class="h2 fw-bold mb-4">Seu carrinho</h1>
+
+{% if linhas %}
+<div class="row g-4 align-items-start">
+  <div class="col-12 col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <ul class="list-group list-group-flush">
+        {% for linha in linhas %}
+          {% with produto=linha.produto %}
+          <li class="list-group-item item-carrinho py-4 px-3 px-md-4">
+            <div class="d-flex flex-wrap align-items-center gap-3">
+              {% if produto.imagem %}
+                <img class="item-carrinho__foto" src="{{ produto.imagem.url }}" alt="{{ produto.nome }}">
+              {% else %}
+                {% include "loja/_sem_foto.html" with classe="item-carrinho__foto" legenda=False %}
+              {% endif %}
+
+              <div class="flex-grow-1">
+                <p class="rotulo-categoria mb-1">{{ produto.categoria.nome }}</p>
+                <h2 class="h6 fw-semibold mb-1">{{ produto.nome }}</h2>
+                <p class="small text-body-secondary mb-0">
+                  {{ produto.preco|reais }} cada · {{ produto.estoque_atual }} em estoque
+                </p>
+              </div>
+
+              <div class="d-flex align-items-center gap-2">
+                <form method="post" class="m-0">
+                  {% csrf_token %}
+                  <input type="hidden" name="produto" value="{{ produto.pk }}">
+                  <button type="submit" name="acao" value="diminuir" class="btn btn-quantidade"
+                          aria-label="Diminuir a quantidade de {{ produto.nome }}"
+                          {% if linha.quantidade <= 1 %}disabled{% endif %}>−</button>
+                </form>
+                <span class="quantidade" aria-label="Quantidade">{{ linha.quantidade }}</span>
+                <form method="post" class="m-0">
+                  {% csrf_token %}
+                  <input type="hidden" name="produto" value="{{ produto.pk }}">
+                  <button type="submit" name="acao" value="aumentar" class="btn btn-quantidade"
+                          aria-label="Aumentar a quantidade de {{ produto.nome }}"
+                          {% if not linha.pode_aumentar %}disabled{% endif %}>+</button>
+                </form>
+              </div>
+
+              <p class="preco subtotal-item mb-0 text-end">{{ linha.subtotal|reais }}</p>
+
+              <form method="post" class="m-0">
+                {% csrf_token %}
+                <input type="hidden" name="produto" value="{{ produto.pk }}">
+                <button type="submit" name="acao" value="remover" class="btn btn-link link-remover p-0">Remover</button>
+              </form>
+            </div>
+
+            {% if linha.aviso %}
+              <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 mt-3 mb-0 py-2" role="alert">
+                <span class="flex-grow-1">{{ linha.aviso }}</span>
+                {% if produto.estoque_atual > 0 and linha.quantidade > produto.estoque_atual %}
+                  <form method="post" class="m-0">
+                    {% csrf_token %}
+                    <input type="hidden" name="produto" value="{{ produto.pk }}">
+                    <button type="submit" name="acao" value="ajustar" class="btn btn-sm btn-outline-dark">
+                      Ajustar para {{ produto.estoque_atual }}
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            {% endif %}
+          </li>
+          {% endwith %}
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-4">
+    <aside class="card border-0 shadow-sm resumo-pedido">
+      <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Resumo do pedido</h2>
+        <dl class="mb-0">
+          <div class="d-flex justify-content-between mb-2">
+            <dt class="fw-normal text-body-secondary">Subtotal ({{ quantidade_de_itens }} ite{{ quantidade_de_itens|pluralize:"m,ns" }})</dt>
+            <dd class="mb-0" id="subtotal-carrinho">{{ total|reais }}</dd>
+          </div>
+          <div class="d-flex justify-content-between pb-3 mb-3 border-bottom">
+            <dt class="fw-normal text-body-secondary">Entrega: retirada na loja</dt>
+            <dd class="mb-0 texto-gratis">Grátis</dd>
+          </div>
+          <div class="d-flex justify-content-between align-items-baseline mb-4">
+            <dt class="h4 fw-bold mb-0">Total</dt>
+            <dd class="h4 fw-bold mb-0" id="total-carrinho">{{ total|reais }}</dd>
+          </div>
+        </dl>
+
+        <button type="button" class="btn btn-primary btn-lg w-100" disabled aria-describedby="aviso-checkout">
+          Continuar para o pagamento
+        </button>
+        <p class="small text-body-secondary text-center mt-2 mb-3" id="aviso-checkout">
+          O pagamento chega no pacote 4.5.3 (checkout).
+        </p>
+        <p class="text-center mb-0">
+          <a class="link-acao" href="{% url 'loja:catalogo' %}">Continuar comprando</a>
+        </p>
+      </div>
+    </aside>
+  </div>
+</div>
+{% else %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body text-center py-5">
+    <p class="mb-2">Seu carrinho está vazio.</p>
+    <a class="link-acao" href="{% url 'loja:catalogo' %}">Continuar comprando</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

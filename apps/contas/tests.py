@@ -135,7 +135,7 @@ class SaidaTests(BaseDeContas):
 
         resposta = self.client.post(reverse("contas:sair"))
 
-        self.assertRedirects(resposta, reverse("core:home"))
+        self.assertRedirects(resposta, reverse("loja:catalogo"))
         self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_sair_nao_aceita_get(self):
@@ -147,7 +147,7 @@ class SaidaTests(BaseDeContas):
         self.assertIn("_auth_user_id", self.client.session)
 
     def test_navbar_mostra_entrar_para_o_visitante(self):
-        resposta = self.client.get(reverse("core:home"))
+        resposta = self.client.get(reverse("loja:catalogo"))
 
         self.assertContains(resposta, reverse("contas:entrar"))
         self.assertNotContains(resposta, reverse("contas:sair"))
@@ -234,14 +234,26 @@ class PerfisTests(BaseDeContas):
             },
         )
 
+    def test_administrador_tem_todas_as_permissoes_de_clientes(self):
+        self.assertEqual(
+            self._codenames(PERFIL_ADMINISTRADOR, "clientes"),
+            {"add_cliente", "change_cliente", "delete_cliente", "view_cliente"},
+        )
+
     def test_vendedor_visualiza_produtos_e_vendas(self):
         self.assertEqual(self._codenames(PERFIL_VENDEDOR, "produtos"), {"view_categoria", "view_produto"})
-        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "vendas"), set())
+        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "vendas"), {"view_venda", "view_itemvenda"})
         self.assertEqual(self._codenames(PERFIL_VENDEDOR, "estoque"), set())
+        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "clientes"), set())
 
     def test_estoquista_visualiza_produtos_e_registra_movimentos(self):
         self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "produtos"), {"view_categoria", "view_produto"})
-        self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "estoque"), set())
+        self.assertEqual(
+            self._codenames(PERFIL_ESTOQUISTA, "estoque"),
+            {"view_movimentoestoque", "add_movimentoestoque"},
+        )
+        self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "vendas"), set())
+        self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "clientes"), set())
 
     def test_cliente_nao_tem_permissao_no_admin(self):
         self.assertEqual(self._codenames(PERFIL_CLIENTE), set())
@@ -298,8 +310,15 @@ class DestinoAposLoginTests(BaseDeContas):
 
         self.assertRedirects(resposta, reverse("admin:index"))
 
-    def test_cliente_vai_para_o_painel_provisorio(self):
-        self.assertEqual(destino_apos_login(self.cliente), reverse("contas:painel"))
+    def test_cliente_vai_para_o_catalogo(self):
+        self.assertEqual(destino_apos_login(self.cliente), reverse("loja:catalogo"))
+
+        resposta = self.client.post(
+            reverse("contas:entrar"),
+            {"username": "cliente@exemplo.com", "password": SENHA},
+        )
+
+        self.assertRedirects(resposta, reverse("loja:catalogo"))
 
     def test_vendedor_vai_para_o_pdv(self):
         self.assertEqual(destino_apos_login(self.vendedor), reverse("vendas:pdv"))
