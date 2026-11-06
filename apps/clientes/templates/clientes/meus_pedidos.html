@@ -1,0 +1,70 @@
+{% extends "loja/base_loja.html" %}
+{% load loja %}
+
+{% block titulo %}Meus Pedidos | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<h1 class="h2 fw-bold mb-4">Meus Pedidos</h1>
+
+{% if pedidos %}
+  <div class="d-flex flex-column gap-4">
+    {% for pedido in pedidos %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+          <div>
+            <span class="fw-bold fs-5 me-2">Pedido {{ pedido.numero_formatado }}</span>
+            <span class="text-body-secondary small">em {{ pedido.criado_em|date:"d/m/Y \à\s H:i" }}</span>
+          </div>
+          <div>
+            <span class="status-pedido status-pedido--{{ pedido.status }}">{{ pedido.get_status_display }}</span>
+          </div>
+        </div>
+        <div class="card-body p-4">
+          <div class="table-responsive mb-3">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th scope="col">Produto</th>
+                  <th scope="col" class="text-center">Qtd</th>
+                  <th scope="col" class="text-end">Preço unitário</th>
+                  <th scope="col" class="text-end">Subtotal</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for item in pedido.itens.all %}
+                  <tr>
+                    <td>{{ item.produto.nome }}</td>
+                    <td class="text-center">{{ item.quantidade }}</td>
+                    <td class="text-end">{{ item.preco_unitario|reais }}</td>
+                    <td class="text-end fw-semibold">{{ item.subtotal|reais }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="d-flex flex-wrap justify-content-between align-items-center pt-2 border-top">
+            <div class="small text-body-secondary">
+              Forma de pagamento: <strong>{{ pedido.get_forma_pagamento_display }}</strong>
+            </div>
+            <div class="fs-5 fw-bold">
+              Total: <span class="text-primary">{{ pedido.total|reais }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="card border-0 shadow-sm text-center p-5">
+    <div class="card-body">
+      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" class="text-body-tertiary mb-3">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm7.5 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+      </svg>
+      <h2 class="h4 fw-bold mb-2">Você ainda não fez nenhum pedido</h2>
+      <p class="text-body-secondary mb-4">Navegue pela nossa loja e aproveite nossos produtos esportivos!</p>
+      <a href="{% url 'loja:catalogo' %}" class="btn btn-primary btn-lg">Explorar produtos</a>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}
