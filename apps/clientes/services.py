@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
+from apps.vendas.models import Venda
 
 from apps.contas.services import (
     PERFIL_ADMINISTRADOR,
@@ -165,3 +166,24 @@ def cliente_do_checkout(usuario, dados_do_visitante=None):
         raise ErroDeIdentificacao("Informe nome, e-mail e telefone.")
 
     return identificar_visitante(**dados_do_visitante)
+
+
+def pedidos_do_cliente(usuario, status=None):
+    """
+    Retorna a lista de pedidos do canal online do cliente associado ao usuário informado,
+    ordenados do mais recente para o mais antigo, com os itens e produtos pré-carregados.
+    Permite filtragem opcional por status ('aguardando_retirada', 'retirada', 'cancelada').
+    """
+    if not hasattr(usuario, 'cliente') or not usuario.cliente:
+        return Venda.objects.none()
+
+    qs = (
+        Venda.objects.filter(cliente=usuario.cliente, canal='online')
+        .prefetch_related('itens', 'itens__produto')
+        .order_by('-criado_em')
+    )
+
+    if status in ['aguardando_retirada', 'retirada', 'cancelada']:
+        qs = qs.filter(status=status)
+
+    return qs

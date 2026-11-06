@@ -2,6 +2,7 @@
 Testes unitários do módulo Clientes.
 
 Pacote 4.6.1: cadastro com consentimento LGPD (HU14).
+Pacote 4.6.2: histórico de compras ("Meus pedidos") (HU15).
 Pacote 4.5.3: identificação do cliente no checkout da loja online (HU12).
 """
 from datetime import timedelta
@@ -16,6 +17,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.contas.services import PERFIL_CLIENTE, PERFIL_ESTOQUISTA, PERFIL_VENDEDOR, perfil_do_usuario
+from apps.produtos.models import Categoria, Produto
+from apps.vendas.models import CanalDeVenda, FormaDePagamento, ItemVenda, StatusDeVenda, Venda
 from .admin import ClienteAdmin
 from .forms import FormularioDeCadastroCliente
 from .models import Cliente
@@ -29,6 +32,7 @@ from .services import (
     cliente_da_conta,
     cliente_do_checkout,
     identificar_visitante,
+    pedidos_do_cliente,
 )
 
 Usuario = get_user_model()
@@ -182,7 +186,6 @@ class AdminClienteTests(TestCase):
         self.assertEqual(ClienteAdmin.readonly_fields, ("consentimento_em", "criado_em"))
 
 
-# ------------------------------------------------------------------ Checkout da loja (4.5.3)
 class IdentificacaoNoCheckoutTests(TestCase):
     """HU12: quem compra pela loja online é identificado sem fazer pedido no nome de outra pessoa."""
 
@@ -270,3 +273,60 @@ class IdentificacaoNoCheckoutTests(TestCase):
     def test_visitante_sem_dados_e_recusado(self):
         with self.assertRaises(ErroDeIdentificacao):
             cliente_do_checkout(AnonymousUser())
+
+
+class HistoricoDeComprasTests(TestCase):
+    """HU15: Histórico de compras ("Meus pedidos")."""
+
+    def setUp(self):
+        call_command("criar_perfis", verbosity=0)
+        self.usuario, self.cliente = cadastrar_cliente(
+            "Carlos Rocha", "carlos@exemplo.com", "16999998888", "SenhaForte123!"
+        )
+        self.categoria = Categoria.objects.create(nome="Futebol")
+        self.produto = Produto.objects.create(
+            codigo="PROD001",
+            nome="Bola de Futebol",
+            preco=100.00,
+            estoque_atual=10,
+            categoria=self.categoria,
+        )
+
+    def test_cliente_visualiza_seus_pedidos(self):
+        venda = Venda.objects.create(
+            numero=1001,
+            canal=CanalDeVenda.ONLINE,
+            status=StatusDeVenda.AGUARDANDO_RETIRADA,
+            forma_pagamento=FormaDePagamento.PIX,
+            total=100.00,
+            cliente=self.cliente,
+        )
+        ItemVenda.objects.create(venda=venda, produto=self.produto, quantidade=1, preco_unitario=100.00)
+
+        pedidos = pedidos_do_cliente(self.usuario)
+        self.assertEqual(len(pedidos), 1)
+        self.assertEqual(pedidos[0].numero, 1001)
+
+    def test_view_meus_pedidos_requer_login(self):
+        url_login = reverse("contas:entrar")
+        url_pedidos = reverse("clientes:meus_pedidos")
+        resposta = self.client.get(url_pedidos)
+        self.assertRedirects(resposta, f"{url_login}?next={url_pedidos}")
+
+    def test_view_meus_pedidos_exibe_lista(self):
+        venda = Venda.objects.create(
+            numero=1002,
+            canal=CanalDeVenda.ONLINE,
+            status=StatusDeVenda.AGUARDANDO_RETIRADA,
+            forma_pagamento=FormaDePagamento.PIX,
+            total=100.00,
+            cliente=self.cliente,
+        )
+        ItemVenda.objects.create(venda=venda, produto=self.produto, quantidade=1, preco_unitario=100.00)
+
+        self.client.force_login(self.usuario)
+        resposta = self.client.get(reverse("clientes:meus_pedidos"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertTemplateUsed(resposta, "clientes/meus_pedidos.html")
+        self.assertContains(resposta, "#1002")

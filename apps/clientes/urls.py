@@ -11,4 +11,5 @@ app_name = "clientes"
 
 urlpatterns = [
     path("cadastro/", views.cadastro, name="cadastro"),
+    path('meus-pedidos/', views.meus_pedidos, name='meus_pedidos'),
 ]
