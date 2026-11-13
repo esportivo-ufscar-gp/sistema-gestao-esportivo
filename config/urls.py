@@ -13,6 +13,7 @@ urlpatterns = [
     path("clientes/", include("apps.clientes.urls")),
     path("estoque/", include("apps.estoque.urls")),
     path("loja/", include("apps.loja.urls")),
+    path("relatorios/", include("apps.relatorios.urls")),
     path("vendas/", include("apps.vendas.urls")),
     path("", include("apps.core.urls")),
 ]
