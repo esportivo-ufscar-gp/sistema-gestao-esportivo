@@ -456,6 +456,18 @@ class TelaDeRelatoriosTests(ComVendas, TestCase):
         self.assertContains(resposta, '<input type="hidden" name="data_inicial" value="2026-10-01">')
         self.assertContains(resposta, '<input type="hidden" name="data_final" value="2026-10-31">')
 
+    def test_link_de_relatorios_no_cabecalho_do_admin(self):
+        # O administrador cai no Admin depois do login; o link precisa estar lá também.
+        self.client.force_login(self.admin)
+        resposta = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resposta, f'<a href="{self.url}">Relatórios</a>', html=True)
+        self.assertContains(resposta, "Esportivo UFSCar | Administração")  # a marca do Admin continua
+
+        estoquista_da_equipe = self.usuario("diego", PERFIL_ESTOQUISTA, is_staff=True)
+        self.client.force_login(estoquista_da_equipe)
+        self.assertNotContains(self.client.get(reverse("admin:index")), f'href="{self.url}"')
+
     def test_link_de_relatorios_aparece_so_para_o_administrador(self):
         self.client.force_login(self.admin)
         self.assertContains(self.client.get(self.url), f'href="{self.url}"')
