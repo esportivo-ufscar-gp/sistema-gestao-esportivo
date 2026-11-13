@@ -66,6 +66,30 @@ python manage.py runserver
 
 Acesse http://localhost:8000 e a administração em http://localhost:8000/admin.
 
+### Dados de demonstração (pacote 3.3)
+
+Para apresentar o sistema, rode em um banco recém-migrado e ainda sem vendas:
+
+```bash
+python manage.py migrate
+python manage.py popular_demonstracao              # senha padrão: demo-esportivo-2026
+python manage.py popular_demonstracao --senha XYZ  # em ambiente publicado, use outra senha
+```
+
+O comando cria os perfis, um usuário de cada perfil (`admin@esportivo.demo`,
+`vendedor@esportivo.demo`, `estoquista@esportivo.demo` e a cliente `marina@esportivo.demo`),
+carrega o catálogo de exemplo se ele ainda não existir e registra um mês de vendas nos dois
+canais, com retiradas e cancelamentos. Tudo passa pelos serviços de estoque e de vendas.
+
+### Relatórios (pacote 4.7)
+
+O administrador acessa http://localhost:8000/relatorios/ (link "Relatórios" no cabeçalho):
+
+- **Vendas por período e canal (HU16):** número de vendas, valor total e ticket médio por canal
+  e no total, entre a data inicial e a final; canceladas não entram.
+- **Posição de estoque (HU17):** produto, categoria, saldo e mínimo, com filtro por categoria;
+  saldo igual ou abaixo do mínimo aparece destacado.
+
 A fixture `dados_exemplo` carrega 6 categorias e 10 produtos para demonstração. Os saldos que
 ela traz são apenas carga inicial: a partir daí, o estoque só muda pelo serviço de estoque.
 
@@ -114,7 +138,8 @@ coverage report
 ```
 
 A meta de cobertura das regras de negócio é de 70% nos sprints intermediários e 80% na entrega
-final (configurada em `.coveragerc`).
+final (configurada em `.coveragerc`, que já exige 80% a partir do Sprint 4). Para o relatório
+de cobertura (pacote 5.2), gere também a versão em HTML com `coverage html` (pasta `htmlcov/`).
 
 ## Fluxo de trabalho
 
