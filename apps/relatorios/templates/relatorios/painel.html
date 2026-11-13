@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% load loja relatorios %}
+
+{% block titulo %}Relatórios | Esportivo UFSCar{% endblock %}
+
+{% block conteudo %}
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+  <h1 class="h3 mb-0">Relatórios</h1>
+
+  <form method="get" class="row g-2 align-items-end" aria-label="Filtro do relatório de vendas">
+    {# Mantém o filtro de estoque já aplicado (só o válido) ao trocar o período. #}
+    {% if categoria %}<input type="hidden" name="categoria" value="{{ categoria.pk }}">{% endif %}
+    {% if incluir_inativos %}<input type="hidden" name="incluir_inativos" value="on">{% endif %}
+    <div class="col-6 col-sm-auto">
+      <label class="form-label small mb-1" for="{{ filtro_de_vendas.data_inicial.id_for_label }}">Data inicial</label>
+      {{ filtro_de_vendas.data_inicial }}
+    </div>
+    <div class="col-6 col-sm-auto">
+      <label class="form-label small mb-1" for="{{ filtro_de_vendas.data_final.id_for_label }}">Data final</label>
+      {{ filtro_de_vendas.data_final }}
+    </div>
+    <div class="col-8 col-sm-auto">
+      <label class="form-label small mb-1" for="{{ filtro_de_vendas.canal.id_for_label }}">Canal</label>
+      {{ filtro_de_vendas.canal }}
+    </div>
+    <div class="col-4 col-sm-auto">
+      <button type="submit" class="btn btn-primary w-100">Aplicar</button>
+    </div>
+  </form>
+</div>
+
+{% if filtro_de_vendas.errors %}
+  <div class="alert alert-danger">
+    {% for campo, erros in filtro_de_vendas.errors.items %}{% for erro in erros %}{{ erro }} {% endfor %}{% endfor %}
+  </div>
+{% endif %}
+
+{% if vendas %}
+  {# ---------------------------------------------------------- 4.7.1 Vendas por período e canal #}
+  <div class="row g-3 mb-4">
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm h-100"><div class="card-body">
+        <div class="small text-uppercase text-body-secondary fw-semibold">Total vendido</div>
+        <div class="fs-3 fw-bold" data-teste="total-vendido">{{ vendas.total.valor_total|reais }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card shadow-sm h-100"><div class="card-body">
+        <div class="small text-uppercase text-body-secondary fw-semibold">Número de vendas</div>
+        <div class="fs-3 fw-bold">{{ vendas.total.vendas }}</div>
+      </div></div>
+    </div>
+    <div class="col-6 col-md-4">
+      <div class="card shadow-sm h-100"><div class="card-body">
+        <div class="small text-uppercase text-body-secondary fw-semibold">Ticket médio</div>
+        <div class="fs-3 fw-bold">{{ vendas.total.ticket_medio|reais }}</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-body">
+      <div class="d-flex flex-column flex-sm-row justify-content-between gap-1 mb-3">
+        <h2 class="h5 mb-0">Vendas por canal</h2>
+        <span class="small text-body-secondary">
+          {{ vendas.data_inicial|date:"d/m/Y" }} a {{ vendas.data_final|date:"d/m/Y" }} · vendas canceladas não entram
+        </span>
+      </div>
+
+      {% for linha in vendas.canais %}
+        <div class="d-flex align-items-center gap-3 mb-2">
+          <span class="small fw-semibold relatorio-rotulo-canal">{{ linha.rotulo }}</span>
+          <div class="progress flex-grow-1" role="progressbar" aria-label="Participação de {{ linha.rotulo }}"
+               aria-valuenow="{{ linha.percentual|ponto }}" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar relatorio-barra-{{ linha.canal }}" style="width: {{ linha.percentual|ponto }}%"></div>
+          </div>
+          <span class="small fw-semibold text-end relatorio-percentual">{{ linha.percentual|floatformat:1 }}%</span>
+        </div>
+      {% endfor %}
+
+      <div class="table-responsive mt-3">
+        <table class="table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Canal</th>
+              <th scope="col" class="text-end">Vendas</th>
+              <th scope="col" class="text-end">Valor total</th>
+              <th scope="col" class="text-end">Ticket médio</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for linha in vendas.canais %}
+              <tr>
+                <td>{{ linha.rotulo }}</td>
+                <td class="text-end">{{ linha.vendas }}</td>
+                <td class="text-end">{{ linha.valor_total|reais }}</td>
+                <td class="text-end">{{ linha.ticket_medio|reais }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="fw-bold">
+              <td>Total</td>
+              <td class="text-end">{{ vendas.total.vendas }}</td>
+              <td class="text-end">{{ vendas.total.valor_total|reais }}</td>
+              <td class="text-end">{{ vendas.total.ticket_medio|reais }}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endif %}
+
+{# ---------------------------------------------------------- 4.7.2 Posição de estoque #}
+<div class="card shadow-sm">
+  <div class="card-body">
+    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end gap-2 mb-3">
+      <h2 class="h5 mb-0">Posição de estoque</h2>
+      <form method="get" class="d-flex flex-wrap align-items-end gap-2" aria-label="Filtro da posição de estoque">
+        {% for campo in filtro_de_vendas %}
+          {% if campo.value %}<input type="hidden" name="{{ campo.html_name }}" value="{{ campo.value }}">{% endif %}
+        {% endfor %}
+        <div>
+          <label class="form-label small mb-1" for="{{ filtro_de_estoque.categoria.id_for_label }}">Categoria</label>
+          {{ filtro_de_estoque.categoria }}
+        </div>
+        <div class="form-check mb-2">
+          {{ filtro_de_estoque.incluir_inativos }}
+          <label class="form-check-label small" for="{{ filtro_de_estoque.incluir_inativos.id_for_label }}">
+            Incluir produtos inativos
+          </label>
+        </div>
+        <button type="submit" class="btn btn-outline-secondary">Filtrar</button>
+      </form>
+    </div>
+
+    {% if filtro_de_estoque.errors %}
+      <div class="alert alert-warning py-2" role="alert" data-teste="erro-categoria">
+        {% for campo, erros in filtro_de_estoque.errors.items %}{% for erro in erros %}{{ erro }} {% endfor %}{% endfor %}
+        Mostrando todas as categorias.
+      </div>
+    {% endif %}
+
+    <p class="small mb-2" data-teste="resumo-estoque">
+      <span class="badge text-bg-danger">{{ resumo_de_estoque.sem_estoque }} sem estoque</span>
+      <span class="badge text-bg-warning">{{ resumo_de_estoque.abaixo_do_minimo }} abaixo do mínimo</span>
+      <span class="badge text-bg-success">{{ resumo_de_estoque.normal }} normais</span>
+      {% if incluir_inativos %}
+        <span class="badge text-bg-secondary">{{ resumo_de_estoque.inativo }} inativos</span>
+      {% endif %}
+    </p>
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th scope="col">Produto</th>
+            <th scope="col">Categoria</th>
+            <th scope="col" class="text-end">Saldo</th>
+            <th scope="col" class="text-end">Mínimo</th>
+            <th scope="col">Situação</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for produto in produtos %}
+            <tr class="{% if produto.situacao == 'sem_estoque' %}table-danger{% elif produto.situacao == 'abaixo_do_minimo' %}table-warning{% elif produto.situacao == 'inativo' %}relatorio-produto-inativo{% endif %}"
+                data-situacao="{{ produto.situacao }}">
+              <td>
+                {{ produto.nome }}
+                {% if not produto.ativo %}<span class="badge text-bg-secondary ms-1">Inativo</span>{% endif %}
+              </td>
+              <td>{{ produto.categoria.nome }}</td>
+              <td class="text-end fw-bold">{{ produto.estoque_atual }}</td>
+              <td class="text-end">{{ produto.estoque_minimo }}</td>
+              <td class="fw-semibold {% if produto.situacao == 'sem_estoque' %}text-danger{% elif produto.situacao == 'normal' %}text-success{% endif %}">
+                {{ produto.situacao|situacao }}
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="5" class="text-body-secondary">Nenhum produto encontrado com este filtro.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

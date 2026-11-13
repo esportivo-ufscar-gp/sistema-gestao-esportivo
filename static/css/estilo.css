@@ -381,3 +381,25 @@ body {
   background-color: #FDE2E2;
   color: #B42318;
 }
+
+/* ------------------------------------------------------------------ Relatórios (4.7) */
+.relatorio-rotulo-canal {
+  min-width: 6.5rem;
+}
+
+.relatorio-percentual {
+  min-width: 3.5rem;
+}
+
+.relatorio-barra-loja_fisica {
+  background-color: var(--cor-cabecalho);
+}
+
+.relatorio-barra-online {
+  background-color: var(--cor-acao-viva);
+}
+
+/* Produto inativo na posição de estoque: texto apagado, sem destaque de compra. */
+.relatorio-produto-inativo {
+  --bs-table-color: var(--bs-secondary-color);
+}

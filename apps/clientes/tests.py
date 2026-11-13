@@ -79,6 +79,15 @@ class CadastroClienteServiceTests(TestCase):
 
         self.assertIn("email", erro.exception.message_dict)
 
+    def test_senha_fraca_e_recusada_sem_criar_conta(self):
+        for senha in ("1", "12345678", "password", "marina@exemplo.com"):
+            with self.assertRaises(ValidationError, msg=senha) as erro:
+                cadastrar_cliente("Marina Silva", "marina@exemplo.com", "1699999999", senha)
+
+            self.assertIn("senha", erro.exception.message_dict)
+        self.assertFalse(User.objects.filter(email="marina@exemplo.com").exists())
+        self.assertFalse(Cliente.objects.exists())
+
     def test_email_unico_garantido_no_banco_de_dados(self):
         u1 = User.objects.create_user("c1@exemplo.com", "c1@exemplo.com", "SenhaForte123!")
         Cliente.objects.create(nome="C1", email="c1@exemplo.com",
@@ -167,6 +176,32 @@ class ViewCadastroClienteTests(TestCase):
         self.assertRedirects(resposta, reverse("loja:catalogo"))
         self.assertTrue(Cliente.objects.filter(email="marina@exemplo.com").exists())
         self.assertIn("_auth_user_id", self.client.session)
+
+    def dados(self, **campos):
+        return {
+            "nome": "Marina Silva", "email": "marina@exemplo.com", "telefone": "(16) 99888-7766",
+            "senha": "SenhaForte123!", "confirmacao_senha": "SenhaForte123!",
+            "aceito_termos": True, "autorizo_lgpd": True, **campos,
+        }
+
+    def test_senha_curta_mostra_erro_no_campo_e_nao_cria_conta(self):
+        resposta = self.client.post(reverse("clientes:cadastro"), self.dados(senha="abc12", confirmacao_senha="abc12"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertIn("senha", resposta.context["form"].errors)
+        self.assertContains(resposta, "pelo menos 8 caracteres")
+        self.assertFalse(Cliente.objects.exists())
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_email_de_conta_da_equipe_mostra_erro_no_campo(self):
+        # O formulário só confere o e-mail entre os clientes; a conta da equipe é barrada pelo serviço.
+        User.objects.create_user("carla", "carla@esportivo.com", "SenhaForte123!", is_staff=True)
+
+        resposta = self.client.post(reverse("clientes:cadastro"), self.dados(email="carla@esportivo.com"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["form"].errors["email"], ["Já existe uma conta cadastrada com este e-mail."])
+        self.assertFalse(Cliente.objects.exists())
 
     def test_usuario_logado_ao_acessar_cadastro_e_redirecionado(self):
         usuario = User.objects.create_user("cliente", "cliente@exemplo.com", "senha")
