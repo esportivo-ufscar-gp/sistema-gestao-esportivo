@@ -91,6 +91,26 @@ class DadosDeDemonstracaoTests(TestCase):
         self.assertFalse(Produto.objects.filter(estoque_atual__lt=0).exists())
         self.assertTrue(produtos_em_alerta().exists())
 
+    def test_historico_de_estoque_fica_em_ordem_cronologica(self):
+        from apps.produtos.models import Produto
+
+        self.popular()
+
+        for produto in Produto.objects.all():
+            por_data = list(produto.movimentos.order_by("criado_em", "id").values_list("id", flat=True))
+            por_ordem_real = list(produto.movimentos.order_by("id").values_list("id", flat=True))
+            self.assertEqual(por_data, por_ordem_real, produto.nome)
+
+    def test_canais_ficam_intercalados_no_periodo(self):
+        from apps.vendas.models import CanalDeVenda, Venda
+
+        self.popular()
+        numeros_online = Venda.objects.filter(canal=CanalDeVenda.ONLINE).values_list("numero", flat=True)
+        numeros_pdv = Venda.objects.filter(canal=CanalDeVenda.LOJA_FISICA).values_list("numero", flat=True)
+
+        # Algum pedido online acontece antes da última venda do PDV: um canal não vem todo depois do outro.
+        self.assertLess(min(numeros_online), max(numeros_pdv))
+
     def test_nao_roda_em_banco_com_vendas(self):
         from apps.core.demonstracao import ErroDeDemonstracao
 

@@ -6,12 +6,12 @@ de exemplo e um mês de vendas nos dois canais, com alguns cancelamentos e retir
 relatórios (4.7) e o painel de estoque terem o que mostrar.
 
 Tudo passa pelos serviços do sistema: as vendas baixam estoque, os cancelamentos estornam e
-as compras entram como movimento de entrada. Só a data das vendas é ajustada depois, para
-espalhá-las pelos últimos 30 dias.
+as compras entram como movimento de entrada. Só as datas são ajustadas depois: as vendas se
+espalham pelos últimos 30 dias, em horário comercial, e a compra inicial fica antes delas.
 """
 import random
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -82,29 +82,36 @@ def popular(senha=SENHA_PADRAO, vendas_pdv=40, pedidos_online=15, semente=2026):
 
     # Produtos já abaixo do mínimo ficam como estão: é o que o relatório de estoque destaca.
     vendaveis = list(Produto.objects.filter(ativo=True, estoque_atual__gt=F("estoque_minimo")).order_by("id"))
-    for produto in vendaveis:
+    compras = [
         registrar_entrada(produto, COMPRA_INICIAL, usuario=estoquista, motivo="Compra inicial (demonstração)")
+        for produto in vendaveis
+    ]
 
-    pdv = []
-    for _ in range(vendas_pdv):
-        forma = sorteio.choice(FormaDePagamento.values)
-        pdv.append(registrar_venda_pdv(vendedor, _itens(sorteio, vendaveis), forma))
-    online = []
-    for _ in range(pedidos_online):
-        forma = sorteio.choice([FormaDePagamento.CARTAO, FormaDePagamento.PIX])
-        online.append(registrar_pedido_online(sorteio.choice(clientes), _itens(sorteio, vendaveis), forma))
+    # Vendas do PDV e pedidos online intercalados, como num dia real de loja: assim os dois
+    # canais ficam espalhados pelo mês inteiro, e não um canal inteiro antes do outro.
+    canais = ["pdv"] * vendas_pdv + ["online"] * pedidos_online
+    sorteio.shuffle(canais)
+    pdv, online = [], []
+    for canal in canais:
+        if canal == "pdv":
+            forma = sorteio.choice(FormaDePagamento.values)
+            pdv.append(registrar_venda_pdv(vendedor, _itens(sorteio, vendaveis), forma))
+        else:
+            forma = sorteio.choice([FormaDePagamento.CARTAO, FormaDePagamento.PIX])
+            online.append(registrar_pedido_online(sorteio.choice(clientes), _itens(sorteio, vendaveis), forma))
     resumo.vendas_pdv, resumo.pedidos_online = len(pdv), len(online)
 
     # Datas espalhadas pelos últimos 30 dias, na ordem dos números: a venda #0001 é a mais antiga.
     agora = timezone.now()
     vendas = sorted(pdv + online, key=lambda venda: venda.numero)
-    datas = sorted(
-        agora - timedelta(days=sorteio.randint(0, DIAS_DE_HISTORICO - 1), minutes=sorteio.randint(0, 600))
-        for _ in vendas
-    )
+    datas = sorted(_momento_da_venda(sorteio, agora) for _ in vendas)
     for venda, quando in zip(vendas, datas):
         Venda.objects.filter(pk=venda.pk).update(criado_em=quando)
         MovimentoEstoque.objects.filter(venda=venda).update(criado_em=quando)
+
+    # A compra inicial vem antes da primeira venda, para o histórico de estoque fazer sentido.
+    inicio = timezone.make_aware(datetime.combine(_dia(agora, DIAS_DE_HISTORICO), time(8, 0)))
+    MovimentoEstoque.objects.filter(pk__in=[compra.pk for compra in compras]).update(criado_em=inicio)
 
     # Metade dos pedidos online já foi retirada; os demais aguardam retirada na loja.
     for pedido in online[: len(online) // 2]:
@@ -137,6 +144,19 @@ def _cliente(senha, nome, email, telefone, resumo):
         _, cliente = cadastrar_cliente(nome, email, telefone, senha)
         resumo.usuarios.append(email)
     return cliente
+
+
+def _dia(agora, dias_atras):
+    return timezone.localtime(agora).date() - timedelta(days=dias_atras)
+
+
+def _momento_da_venda(sorteio, agora):
+    """Um dia dos últimos 30, no horário da loja (9h às 19h); nunca depois de agora."""
+    dia = _dia(agora, sorteio.randint(0, DIAS_DE_HISTORICO - 1))
+    quando = timezone.make_aware(datetime.combine(dia, time(sorteio.randint(9, 18), sorteio.randint(0, 59))))
+    if quando > agora:
+        quando = agora - timedelta(minutes=sorteio.randint(1, 60))
+    return quando
 
 
 def _itens(sorteio, vendaveis):
