@@ -8,7 +8,7 @@ Cada critério de aceite tem pelo menos um teste. Os saldos dos produtos de test
 direto na criação; quando um teste precisa que o saldo caia "porque alguém comprou antes",
 ele usa o serviço de estoque ou o PDV, como a venda faria.
 """
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, User
@@ -980,10 +980,11 @@ class GestaoDePedidosNoAdminTests(BaseDoCheckout):
     def test_filtro_por_data(self):
         antigo = timezone.now() - timedelta(days=40)
         Venda.objects.filter(pk=self.retirado.pk).update(criado_em=antigo)
-        hoje = timezone.localdate()
+        # Meia-noite de hoje no fuso da loja, como o filtro de datas do Admin envia.
+        hoje = timezone.make_aware(datetime.combine(timezone.localdate(), time.min))
 
         self.assertEqual(
-            self.pedidos(criado_em__gte=hoje.isoformat(), criado_em__lt=(hoje + timedelta(days=1)).isoformat()),
+            self.pedidos(criado_em__gte=str(hoje), criado_em__lt=str(hoje + timedelta(days=1))),
             {self.aguardando.pk, self.cancelado.pk},
         )
         data_antiga = timezone.localtime(antigo).date()
