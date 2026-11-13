@@ -13,8 +13,9 @@ import random
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db import transaction
 from django.db.models import F
@@ -68,6 +69,10 @@ def popular(senha=SENHA_PADRAO, vendas_pdv=40, pedidos_online=15, semente=2026):
     """
     if Venda.objects.exists():
         raise ErroDeDemonstracao("O banco já tem vendas. Use um banco novo para os dados de demonstração.")
+    try:
+        password_validation.validate_password(senha)
+    except ValidationError as erro:
+        raise ErroDeDemonstracao("Senha fraca para os usuários de demonstração: " + " ".join(erro.messages))
 
     sorteio = random.Random(semente)
     resumo = Resumo()

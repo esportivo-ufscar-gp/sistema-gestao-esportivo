@@ -35,6 +35,17 @@ class HomeTests(TestCase):
         self.assertRedirects(resposta, reverse("loja:catalogo"))
 
 
+class PaginasLegaisTests(TestCase):
+    """Termos de Uso e Política de Privacidade, abertos pelo cadastro de cliente (HU14)."""
+
+    def test_termos_e_privacidade_abrem_sem_login(self):
+        for rota, template in (("core:termos", "core/termos.html"), ("core:privacidade", "core/privacidade.html")):
+            resposta = self.client.get(reverse(rota))
+
+            self.assertEqual(resposta.status_code, 200, rota)
+            self.assertTemplateUsed(resposta, template)
+
+
 class DadosDeDemonstracaoTests(TestCase):
     """Pacote 3.3: o comando popular_demonstracao prepara o banco para a apresentação."""
 
@@ -110,6 +121,16 @@ class DadosDeDemonstracaoTests(TestCase):
 
         # Algum pedido online acontece antes da última venda do PDV: um canal não vem todo depois do outro.
         self.assertLess(min(numeros_online), max(numeros_pdv))
+
+    def test_senha_fraca_e_recusada_antes_de_gravar(self):
+        from apps.core.demonstracao import ErroDeDemonstracao, popular
+        from apps.vendas.models import Venda
+
+        with self.assertRaises(ErroDeDemonstracao):
+            popular(senha="123")
+
+        self.assertFalse(Venda.objects.exists())
+        self.assertFalse(User.objects.exists())
 
     def test_nao_roda_em_banco_com_vendas(self):
         from apps.core.demonstracao import ErroDeDemonstracao
