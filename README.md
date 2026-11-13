@@ -79,7 +79,9 @@ python manage.py popular_demonstracao --senha XYZ  # em ambiente publicado, use 
 O comando cria os perfis, um usuário de cada perfil (`admin@esportivo.demo`,
 `vendedor@esportivo.demo`, `estoquista@esportivo.demo` e a cliente `marina@esportivo.demo`),
 carrega o catálogo de exemplo se ele ainda não existir e registra um mês de vendas nos dois
-canais, com retiradas e cancelamentos. Tudo passa pelos serviços de estoque e de vendas.
+canais, com retiradas e cancelamentos. Tudo passa pelos serviços de estoque e de vendas. A
+`--senha` segue as mesmas regras do cadastro de cliente (mínimo de 8 caracteres, não pode ser
+comum nem só números).
 
 ### Relatórios (pacote 4.7)
 
@@ -88,7 +90,10 @@ O administrador acessa http://localhost:8000/relatorios/ (link "Relatórios" no 
 - **Vendas por período e canal (HU16):** número de vendas, valor total e ticket médio por canal
   e no total, entre a data inicial e a final; canceladas não entram.
 - **Posição de estoque (HU17):** produto, categoria, saldo e mínimo, com filtro por categoria;
-  saldo igual ou abaixo do mínimo aparece destacado.
+  saldo igual ou abaixo do mínimo aparece destacado, e um resumo mostra quantos produtos estão
+  em cada situação. Categorias inativas aparecem na lista marcadas como "(inativa)" e não podem
+  ser escolhidas; uma categoria inválida na URL mostra um aviso e volta para todas. A opção
+  "Incluir produtos inativos" mostra também os produtos desativados, no fim e sem destaque.
 
 A fixture `dados_exemplo` carrega 6 categorias e 10 produtos para demonstração. Os saldos que
 ela traz são apenas carga inicial: a partir daí, o estoque só muda pelo serviço de estoque.
