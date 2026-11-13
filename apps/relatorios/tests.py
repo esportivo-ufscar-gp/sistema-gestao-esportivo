@@ -21,14 +21,16 @@ from apps.contas.services import PERFIL_ADMINISTRADOR, PERFIL_ESTOQUISTA, PERFIL
 from apps.produtos.models import Categoria, Produto
 from apps.vendas.models import CanalDeVenda, FormaDePagamento, StatusDeVenda, Venda
 
-from .forms import FiltroDeVendas
+from .forms import FiltroDeEstoque, FiltroDeVendas
 from .services import (
     SITUACAO_ABAIXO_DO_MINIMO,
+    SITUACAO_INATIVO,
     SITUACAO_NORMAL,
     SITUACAO_SEM_ESTOQUE,
     PeriodoInvalido,
     periodo_padrao,
     posicao_de_estoque,
+    resumo_da_posicao,
     ticket_medio,
     vendas_por_periodo,
 )
@@ -248,6 +250,68 @@ class PosicaoDeEstoqueTests(TestCase):
         self.assertEqual(self.camisa.estoque_atual, 0)
         self.assertFalse(self.camisa.movimentos.exists())
 
+    def test_incluir_inativos_mostra_no_fim_e_sem_destaque(self):
+        produtos = list(posicao_de_estoque(incluir_inativos=True))
+
+        self.assertEqual(len(produtos), 5)
+        self.assertEqual(produtos[-1], self.inativo)
+        # Saldo 1 com mínimo 3, mas inativo: não é sugestão de compra.
+        self.assertEqual(produtos[-1].situacao, SITUACAO_INATIVO)
+
+    def test_incluir_inativos_respeita_a_categoria(self):
+        self.assertEqual(set(posicao_de_estoque(self.futebol, incluir_inativos=True)), {self.chuteira, self.bola})
+
+    def test_resumo_conta_produtos_por_situacao(self):
+        self.assertEqual(
+            resumo_da_posicao(posicao_de_estoque(incluir_inativos=True)),
+            {SITUACAO_SEM_ESTOQUE: 1, SITUACAO_ABAIXO_DO_MINIMO: 2, SITUACAO_NORMAL: 1, SITUACAO_INATIVO: 1},
+        )
+
+
+class FiltroDeEstoqueTests(TestCase):
+    """Filtro de categoria: categoria inexistente dá erro; categoria inativa aparece, mas não pode ser escolhida."""
+
+    def setUp(self):
+        self.futebol = Categoria.objects.create(nome="Futebol")
+        self.ciclismo = Categoria.objects.create(nome="Ciclismo", ativa=False)
+        self.academia = Categoria.objects.create(nome="Academia")
+
+    def test_categoria_inexistente_e_erro(self):
+        for valor in ("9999", "abc"):
+            filtro = FiltroDeEstoque({"categoria": valor})
+
+            self.assertFalse(filtro.is_valid(), valor)
+            self.assertEqual(filtro.errors["categoria"], ["Categoria não encontrada."])
+            self.assertEqual(filtro.filtros(), (None, False))
+
+    def test_categoria_inativa_aparece_marcada_e_desabilitada(self):
+        html = str(FiltroDeEstoque()["categoria"])
+
+        self.assertInHTML(f'<option value="{self.ciclismo.pk}" disabled>Ciclismo (inativa)</option>', html)
+        self.assertInHTML(f'<option value="{self.futebol.pk}">Futebol</option>', html)
+
+    def test_categorias_ativas_vem_antes_das_inativas(self):
+        opcoes = [rotulo for _, rotulo in FiltroDeEstoque().fields["categoria"].choices]
+
+        self.assertEqual(opcoes, ["Todas", "Academia", "Futebol", "Ciclismo (inativa)"])
+
+    def test_categoria_inativa_nao_pode_ser_escolhida(self):
+        filtro = FiltroDeEstoque({"categoria": self.ciclismo.pk})
+
+        self.assertFalse(filtro.is_valid())
+        self.assertEqual(
+            filtro.errors["categoria"], ["A categoria “Ciclismo” está inativa e não pode ser usada no filtro."]
+        )
+        self.assertEqual(filtro.filtros(), (None, False))
+
+    def test_categoria_ativa_e_inativos(self):
+        filtro = FiltroDeEstoque({"categoria": self.futebol.pk, "incluir_inativos": "on"})
+
+        self.assertEqual(filtro.filtros(), (self.futebol, True))
+
+    def test_erro_na_categoria_nao_perde_a_opcao_de_inativos(self):
+        self.assertEqual(FiltroDeEstoque({"categoria": "9999", "incluir_inativos": "on"}).filtros(), (None, True))
+
 
 # ------------------------------------------------------ Tela /relatorios/
 class TelaDeRelatoriosTests(ComVendas, TestCase):
@@ -336,6 +400,61 @@ class TelaDeRelatoriosTests(ComVendas, TestCase):
         resposta = self.client.get(self.url, {"categoria": self.chuteira.categoria_id})
 
         self.assertEqual(list(resposta.context["produtos"]), [self.chuteira])
+
+    def test_categoria_invalida_na_tela_mostra_erro_e_todas_as_categorias(self):
+        self.client.force_login(self.admin)
+
+        resposta = self.client.get(self.url, {"categoria": "9999"})
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Categoria não encontrada.")
+        self.assertContains(resposta, "Mostrando todas as categorias.")
+        self.assertEqual(set(resposta.context["produtos"]), {self.chuteira, self.tenis})
+        # O filtro inválido não é repassado para o formulário de vendas.
+        self.assertNotContains(resposta, 'name="categoria" value="9999"')
+
+    def test_categoria_inativa_na_tela_mostra_erro(self):
+        Categoria.objects.filter(pk=self.tenis.categoria_id).update(ativa=False)
+        self.client.force_login(self.admin)
+
+        resposta = self.client.get(self.url, {"categoria": self.tenis.categoria_id})
+
+        self.assertContains(resposta, "A categoria “Corrida” está inativa e não pode ser usada no filtro.")
+        self.assertContains(resposta, "Corrida (inativa)")
+
+    def test_incluir_inativos_na_tela(self):
+        Produto.objects.filter(pk=self.tenis.pk).update(ativo=False)
+        self.client.force_login(self.admin)
+
+        sem = self.client.get(self.url)
+        com = self.client.get(self.url, {"incluir_inativos": "on"})
+
+        self.assertEqual(sem.context["produtos"], [self.chuteira])
+        self.assertEqual(com.context["produtos"], [self.chuteira, self.tenis])
+        self.assertContains(com, 'class="relatorio-produto-inativo"')
+        self.assertContains(com, "1 inativos")
+
+    def test_resumo_de_estoque_na_tela(self):
+        self.client.force_login(self.admin)
+
+        resposta = self.client.get(self.url)
+
+        self.assertContains(resposta, "1 abaixo do mínimo")
+        self.assertContains(resposta, "1 normais")
+
+    def test_filtros_de_vendas_e_estoque_se_mantem_um_no_outro(self):
+        self.client.force_login(self.admin)
+
+        resposta = self.client.get(self.url, {
+            "data_inicial": "2026-10-01", "data_final": "2026-10-31",
+            "categoria": self.chuteira.categoria_id, "incluir_inativos": "on",
+        })
+
+        # Formulário de vendas leva a categoria; o de estoque leva o período.
+        self.assertContains(resposta, f'<input type="hidden" name="categoria" value="{self.chuteira.categoria_id}">')
+        self.assertContains(resposta, '<input type="hidden" name="incluir_inativos" value="on">')
+        self.assertContains(resposta, '<input type="hidden" name="data_inicial" value="2026-10-01">')
+        self.assertContains(resposta, '<input type="hidden" name="data_final" value="2026-10-31">')
 
     def test_link_de_relatorios_aparece_so_para_o_administrador(self):
         self.client.force_login(self.admin)

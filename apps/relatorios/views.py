@@ -12,7 +12,7 @@ from apps.contas.decorators import perfil_requerido
 from apps.contas.services import PERFIL_ADMINISTRADOR
 
 from .forms import FiltroDeEstoque, FiltroDeVendas
-from .services import posicao_de_estoque, vendas_por_periodo
+from .services import posicao_de_estoque, resumo_da_posicao, vendas_por_periodo
 
 
 @perfil_requerido(PERFIL_ADMINISTRADOR)
@@ -25,11 +25,16 @@ def painel(request):
         dados = filtro_de_vendas.cleaned_data
         relatorio_de_vendas = vendas_por_periodo(dados["data_inicial"], dados["data_final"], dados["canal"])
 
-    categoria = filtro_de_estoque.cleaned_data["categoria"] if filtro_de_estoque.is_valid() else None
+    # Categoria inválida ou inativa: a tela mostra o erro e volta para todas as categorias.
+    categoria, incluir_inativos = filtro_de_estoque.filtros()
+    produtos = list(posicao_de_estoque(categoria, incluir_inativos))
 
     return render(request, "relatorios/painel.html", {
         "filtro_de_vendas": filtro_de_vendas,
         "filtro_de_estoque": filtro_de_estoque,
         "vendas": relatorio_de_vendas,
-        "produtos": posicao_de_estoque(categoria),
+        "categoria": categoria,
+        "incluir_inativos": incluir_inativos,
+        "produtos": produtos,
+        "resumo_de_estoque": resumo_da_posicao(produtos),
     })

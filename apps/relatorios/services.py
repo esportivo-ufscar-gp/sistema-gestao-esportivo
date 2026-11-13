@@ -6,6 +6,7 @@ Pacote 4.7: vendas por período e canal (4.7.1, HU16) e posição de estoque (4.
 Os relatórios só leem dados: nada aqui grava no banco. As contas são feitas pelo próprio
 banco (Count e Sum), então o relatório continua rápido mesmo com muitas vendas.
 """
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -22,11 +23,13 @@ CENTAVO = Decimal("0.01")
 SITUACAO_SEM_ESTOQUE = "sem_estoque"
 SITUACAO_ABAIXO_DO_MINIMO = "abaixo_do_minimo"
 SITUACAO_NORMAL = "normal"
+SITUACAO_INATIVO = "inativo"
 
 ROTULOS_DE_SITUACAO = {
     SITUACAO_SEM_ESTOQUE: "Sem estoque",
     SITUACAO_ABAIXO_DO_MINIMO: "Abaixo do mínimo",
     SITUACAO_NORMAL: "Normal",
+    SITUACAO_INATIVO: "Inativo",
 }
 
 
@@ -137,24 +140,30 @@ def _percentual(parte, todo):
 
 
 # ------------------------------------------------------------------ 4.7.2 Estoque (HU17)
-def posicao_de_estoque(categoria=None):
+def posicao_de_estoque(categoria=None, incluir_inativos=False):
     """
-    Saldo atual de cada produto ativo, com categoria e estoque mínimo (HU17).
+    Saldo atual de cada produto, com categoria e estoque mínimo (HU17).
 
     Cada produto recebe `situacao`: sem estoque (saldo zero), abaixo do mínimo (saldo igual ou
     abaixo do mínimo, a mesma regra do alerta do 4.3.3) ou normal. Os mais críticos vêm
     primeiro, para a gestão ver logo o que precisa comprar.
+
+    Por padrão só entram produtos ativos, porque são os únicos que a loja volta a comprar. Com
+    `incluir_inativos`, os inativos aparecem no fim, com a situação "inativo" e sem destaque:
+    servem para ver o saldo parado que ainda precisa ser vendido ou baixado.
     """
     produtos = (
-        Produto.objects.filter(ativo=True)
+        Produto.objects
         .select_related("categoria")
         .annotate(
             situacao=Case(
+                When(ativo=False, then=Value(SITUACAO_INATIVO)),
                 When(estoque_atual=0, then=Value(SITUACAO_SEM_ESTOQUE)),
                 When(estoque_atual__lte=F("estoque_minimo"), then=Value(SITUACAO_ABAIXO_DO_MINIMO)),
                 default=Value(SITUACAO_NORMAL),
             ),
             gravidade=Case(
+                When(ativo=False, then=Value(3)),
                 When(estoque_atual=0, then=Value(0)),
                 When(estoque_atual__lte=F("estoque_minimo"), then=Value(1)),
                 default=Value(2),
@@ -164,10 +173,18 @@ def posicao_de_estoque(categoria=None):
         .order_by("gravidade", "nome")
     )
 
+    if not incluir_inativos:
+        produtos = produtos.filter(ativo=True)
     if categoria is not None:
         produtos = produtos.filter(categoria=categoria)
 
     return produtos
+
+
+def resumo_da_posicao(produtos):
+    """Quantos produtos da lista estão em cada situação, para o resumo acima da tabela."""
+    contagem = Counter(produto.situacao for produto in produtos)
+    return {situacao: contagem.get(situacao, 0) for situacao in ROTULOS_DE_SITUACAO}
 
 
 def rotulo_da_situacao(situacao):

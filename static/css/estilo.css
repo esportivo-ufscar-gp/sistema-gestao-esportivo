@@ -398,3 +398,8 @@ body {
 .relatorio-barra-online {
   background-color: var(--cor-acao-viva);
 }
+
+/* Produto inativo na posição de estoque: texto apagado, sem destaque de compra. */
+.relatorio-produto-inativo {
+  --bs-table-color: var(--bs-secondary-color);
+}

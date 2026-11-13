@@ -8,9 +8,9 @@
   <h1 class="h3 mb-0">Relatórios</h1>
 
   <form method="get" class="row g-2 align-items-end" aria-label="Filtro do relatório de vendas">
-    {% if filtro_de_estoque.categoria.value %}
-      <input type="hidden" name="categoria" value="{{ filtro_de_estoque.categoria.value }}">
-    {% endif %}
+    {# Mantém o filtro de estoque já aplicado (só o válido) ao trocar o período. #}
+    {% if categoria %}<input type="hidden" name="categoria" value="{{ categoria.pk }}">{% endif %}
+    {% if incluir_inativos %}<input type="hidden" name="incluir_inativos" value="on">{% endif %}
     <div class="col-6 col-sm-auto">
       <label class="form-label small mb-1" for="{{ filtro_de_vendas.data_inicial.id_for_label }}">Data inicial</label>
       {{ filtro_de_vendas.data_inicial }}
@@ -117,17 +117,39 @@
   <div class="card-body">
     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-end gap-2 mb-3">
       <h2 class="h5 mb-0">Posição de estoque</h2>
-      <form method="get" class="d-flex align-items-end gap-2" aria-label="Filtro da posição de estoque">
+      <form method="get" class="d-flex flex-wrap align-items-end gap-2" aria-label="Filtro da posição de estoque">
         {% for campo in filtro_de_vendas %}
-          {% if campo.value %}<input type="hidden" name="{{ campo.html_name }}" value="{{ campo.value|data_iso }}">{% endif %}
+          {% if campo.value %}<input type="hidden" name="{{ campo.html_name }}" value="{{ campo.value }}">{% endif %}
         {% endfor %}
         <div>
           <label class="form-label small mb-1" for="{{ filtro_de_estoque.categoria.id_for_label }}">Categoria</label>
           {{ filtro_de_estoque.categoria }}
         </div>
+        <div class="form-check mb-2">
+          {{ filtro_de_estoque.incluir_inativos }}
+          <label class="form-check-label small" for="{{ filtro_de_estoque.incluir_inativos.id_for_label }}">
+            Incluir produtos inativos
+          </label>
+        </div>
         <button type="submit" class="btn btn-outline-secondary">Filtrar</button>
       </form>
     </div>
+
+    {% if filtro_de_estoque.errors %}
+      <div class="alert alert-warning py-2" role="alert" data-teste="erro-categoria">
+        {% for campo, erros in filtro_de_estoque.errors.items %}{% for erro in erros %}{{ erro }} {% endfor %}{% endfor %}
+        Mostrando todas as categorias.
+      </div>
+    {% endif %}
+
+    <p class="small mb-2" data-teste="resumo-estoque">
+      <span class="badge text-bg-danger">{{ resumo_de_estoque.sem_estoque }} sem estoque</span>
+      <span class="badge text-bg-warning">{{ resumo_de_estoque.abaixo_do_minimo }} abaixo do mínimo</span>
+      <span class="badge text-bg-success">{{ resumo_de_estoque.normal }} normais</span>
+      {% if incluir_inativos %}
+        <span class="badge text-bg-secondary">{{ resumo_de_estoque.inativo }} inativos</span>
+      {% endif %}
+    </p>
 
     <div class="table-responsive">
       <table class="table table-sm align-middle mb-0">
@@ -142,9 +164,12 @@
         </thead>
         <tbody>
           {% for produto in produtos %}
-            <tr class="{% if produto.situacao == 'sem_estoque' %}table-danger{% elif produto.situacao == 'abaixo_do_minimo' %}table-warning{% endif %}"
+            <tr class="{% if produto.situacao == 'sem_estoque' %}table-danger{% elif produto.situacao == 'abaixo_do_minimo' %}table-warning{% elif produto.situacao == 'inativo' %}relatorio-produto-inativo{% endif %}"
                 data-situacao="{{ produto.situacao }}">
-              <td>{{ produto.nome }}</td>
+              <td>
+                {{ produto.nome }}
+                {% if not produto.ativo %}<span class="badge text-bg-secondary ms-1">Inativo</span>{% endif %}
+              </td>
               <td>{{ produto.categoria.nome }}</td>
               <td class="text-end fw-bold">{{ produto.estoque_atual }}</td>
               <td class="text-end">{{ produto.estoque_minimo }}</td>
@@ -153,7 +178,7 @@
               </td>
             </tr>
           {% empty %}
-            <tr><td colspan="5" class="text-body-secondary">Nenhum produto ativo nesta categoria.</td></tr>
+            <tr><td colspan="5" class="text-body-secondary">Nenhum produto encontrado com este filtro.</td></tr>
           {% endfor %}
         </tbody>
       </table>

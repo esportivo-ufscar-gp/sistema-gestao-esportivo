@@ -49,13 +49,48 @@ class FiltroDeVendas(forms.Form):
         return dados
 
 
+class SelectDeCategoria(forms.Select):
+    """Lista as categorias inativas desabilitadas: elas aparecem, mas não podem ser escolhidas."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        opcao = super().create_option(name, value, label, selected, index, subindex, attrs)
+        categoria = getattr(value, "instance", None)
+        if categoria is not None and not categoria.ativa:
+            opcao["attrs"]["disabled"] = True
+        return opcao
+
+
+class CampoDeCategoria(forms.ModelChoiceField):
+    def label_from_instance(self, categoria):
+        return categoria.nome if categoria.ativa else f"{categoria.nome} (inativa)"
+
+
 class FiltroDeEstoque(forms.Form):
     """Categoria da posição de estoque (HU17); vazio mostra todas."""
 
-    categoria = forms.ModelChoiceField(
+    categoria = CampoDeCategoria(
         label="Categoria",
         required=False,
-        queryset=Categoria.objects.order_by("nome"),
+        # As ativas primeiro; as inativas vão para o fim da lista, marcadas e desabilitadas.
+        queryset=Categoria.objects.order_by("-ativa", "nome"),
         empty_label="Todas",
-        widget=forms.Select(attrs={"class": "form-select"}),
+        widget=SelectDeCategoria(attrs={"class": "form-select"}),
+        error_messages={"invalid_choice": "Categoria não encontrada."},
     )
+    incluir_inativos = forms.BooleanField(
+        label="Incluir produtos inativos",
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "form-check-input"}),
+    )
+
+    def clean_categoria(self):
+        categoria = self.cleaned_data.get("categoria")
+        if categoria is not None and not categoria.ativa:
+            raise forms.ValidationError(f"A categoria “{categoria.nome}” está inativa e não pode ser usada no filtro.")
+        return categoria
+
+    def filtros(self):
+        """Categoria e inclusão de inativos já validados; um filtro inválido fica no padrão."""
+        self.is_valid()
+        dados = getattr(self, "cleaned_data", {})
+        return dados.get("categoria"), dados.get("incluir_inativos", False)
