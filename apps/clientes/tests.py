@@ -5,8 +5,10 @@ Pacote 4.6.1: cadastro com consentimento LGPD (HU14).
 Pacote 4.6.2: histórico de compras ("Meus pedidos") (HU15).
 Pacote 4.5.3: identificação do cliente no checkout da loja online (HU12).
 """
-from datetime import timedelta
+from datetime import datetime, timedelta
+from decimal import Decimal
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser, Group, User
 from django.core.exceptions import ValidationError
@@ -16,9 +18,16 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.contas.services import PERFIL_CLIENTE, PERFIL_ESTOQUISTA, PERFIL_VENDEDOR, perfil_do_usuario
+from apps.contas.services import (
+    PERFIL_ADMINISTRADOR,
+    PERFIL_CLIENTE,
+    PERFIL_ESTOQUISTA,
+    PERFIL_VENDEDOR,
+    perfil_do_usuario,
+)
 from apps.produtos.models import Categoria, Produto
 from apps.vendas.models import CanalDeVenda, FormaDePagamento, ItemVenda, StatusDeVenda, Venda
+from apps.vendas.services import cancelar_venda, marcar_retirado, registrar_pedido_online, registrar_venda_pdv
 from .admin import ClienteAdmin
 from .forms import FormularioDeCadastroCliente
 from .models import Cliente
@@ -31,6 +40,7 @@ from .services import (
     cadastrar_cliente,
     cliente_da_conta,
     cliente_do_checkout,
+    contagem_por_status,
     identificar_visitante,
     pedidos_do_cliente,
 )
@@ -220,6 +230,27 @@ class AdminClienteTests(TestCase):
         self.assertEqual(ClienteAdmin.search_fields, ("nome", "email"))
         self.assertEqual(ClienteAdmin.readonly_fields, ("consentimento_em", "criado_em"))
 
+    def test_admin_nao_cria_cliente_porque_o_consentimento_vem_do_proprio_cliente(self):
+        call_command("criar_perfis", verbosity=0)
+        gerente = User.objects.create_user("carla", "carla@exemplo.com", "SenhaForte123!", is_staff=True)
+        gerente.groups.add(Group.objects.get(name=PERFIL_ADMINISTRADOR))
+        self.client.force_login(gerente)
+        adicionar = reverse("admin:clientes_cliente_add")
+
+        # O administrador tem a permissão add_cliente: quem barra é o ClienteAdmin.
+        self.assertTrue(gerente.has_perm("clientes.add_cliente"))
+
+        lista = self.client.get(reverse("admin:clientes_cliente_changelist"))
+        self.assertEqual(lista.status_code, 200)
+        self.assertNotContains(lista, adicionar)
+        self.assertNotContains(self.client.get(reverse("admin:index")), adicionar)
+
+        self.assertEqual(self.client.get(adicionar).status_code, 403)
+        resposta = self.client.post(adicionar, {"nome": "Sem Consentimento", "email": "x@exemplo.com",
+                                                "telefone": "1"})
+        self.assertEqual(resposta.status_code, 403)
+        self.assertFalse(Cliente.objects.exists())
+
 
 class IdentificacaoNoCheckoutTests(TestCase):
     """HU12: quem compra pela loja online é identificado sem fazer pedido no nome de outra pessoa."""
@@ -365,3 +396,230 @@ class HistoricoDeComprasTests(TestCase):
         self.assertEqual(resposta.status_code, 200)
         self.assertTemplateUsed(resposta, "clientes/meus_pedidos.html")
         self.assertContains(resposta, "#1002")
+
+
+class MeusPedidosTests(TestCase):
+    """HU15: o cliente vê só os próprios pedidos online, com filtro por status."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("criar_perfis", verbosity=0)
+        cls.categoria = Categoria.objects.create(nome="Corrida")
+        cls.tenis = Produto.objects.create(
+            codigo="100110", nome="Tênis de corrida", categoria=cls.categoria,
+            preco=Decimal("349.90"), estoque_atual=50,
+        )
+        cls.garrafa = Produto.objects.create(
+            codigo="100120", nome="Garrafa térmica", categoria=cls.categoria,
+            preco=Decimal("49.90"), estoque_atual=50,
+        )
+        cls.usuario, cls.cliente = cadastrar_cliente("Marina Silva", "marina@exemplo.com", "1699999999",
+                                                     "SenhaForte123!")
+        cls.vendedor = User.objects.create_user("ana", "ana@exemplo.com", "SenhaForte123!", is_staff=True)
+        cls.vendedor.groups.add(Group.objects.get(name=PERFIL_VENDEDOR))
+
+    def setUp(self):
+        self.client.force_login(self.usuario)
+        self.endereco = reverse("clientes:meus_pedidos")
+
+    def pedido(self, produto=None, cliente=None):
+        return registrar_pedido_online(cliente or self.cliente, [(produto or self.tenis, 1)], FormaDePagamento.PIX)
+
+    def numeros(self, resposta):
+        return [pedido.numero for pedido in resposta.context["pedidos"]]
+
+    def test_mostra_data_itens_total_e_status_de_cada_pedido(self):
+        pedido = self.pedido()
+
+        resposta = self.client.get(self.endereco)
+
+        self.assertContains(resposta, "Pedido #0001")
+        self.assertContains(resposta, timezone.localtime(pedido.criado_em).strftime("%d/%m/%Y"))
+        self.assertContains(resposta, "Tênis de corrida")
+        self.assertContains(resposta, "R$ 349,90")
+        self.assertContains(resposta, "Aguardando retirada")
+
+    def test_cliente_nao_ve_os_pedidos_de_outro(self):
+        _, outro = cadastrar_cliente("João Souza", "joao@exemplo.com", "1688888888", "SenhaForte123!")
+        meu = self.pedido()
+        alheio = self.pedido(produto=self.garrafa, cliente=outro)
+
+        resposta = self.client.get(self.endereco)
+
+        self.assertEqual(self.numeros(resposta), [meu.numero])
+        self.assertNotContains(resposta, alheio.numero_formatado)
+        self.assertNotContains(resposta, "Garrafa térmica")
+
+    def test_vendas_do_pdv_ficam_fora(self):
+        registrar_venda_pdv(self.vendedor, [(self.garrafa, 1)], FormaDePagamento.DINHEIRO)
+        pedido = self.pedido()
+
+        resposta = self.client.get(self.endereco)
+
+        self.assertEqual(self.numeros(resposta), [pedido.numero])
+        self.assertEqual(resposta.context["filtros"][0]["quantidade"], 1)
+        self.assertNotContains(resposta, "Garrafa térmica")
+
+    def test_equipe_recebe_403_e_visitante_vai_para_a_entrada(self):
+        administrador = User.objects.create_superuser("carla", "carla@exemplo.com", "SenhaForte123!")
+        estoquista = User.objects.create_user("bruno", "bruno@exemplo.com", "SenhaForte123!")
+        estoquista.groups.add(Group.objects.get(name=PERFIL_ESTOQUISTA))
+
+        for usuario in (administrador, self.vendedor, estoquista):
+            with self.subTest(usuario=usuario.username):
+                self.client.force_login(usuario)
+                self.assertEqual(self.client.get(self.endereco).status_code, 403)
+
+        self.client.logout()
+        resposta = self.client.get(self.endereco)
+        self.assertRedirects(resposta, f"{reverse('contas:entrar')}?next={self.endereco}")
+
+    def test_cada_filtro_mostra_so_o_seu_status_com_os_contadores(self):
+        aguardando = [self.pedido(), self.pedido()]
+        retirado = self.pedido()
+        cancelado = self.pedido()
+        marcar_retirado(retirado, self.vendedor)
+        cancelar_venda(cancelado, self.vendedor)
+
+        esperado = {
+            "": sorted([pedido.numero for pedido in aguardando + [retirado, cancelado]], reverse=True),
+            StatusDeVenda.AGUARDANDO_RETIRADA: sorted([pedido.numero for pedido in aguardando], reverse=True),
+            StatusDeVenda.RETIRADA: [retirado.numero],
+            StatusDeVenda.CANCELADA: [cancelado.numero],
+        }
+        for status, numeros in esperado.items():
+            with self.subTest(status=status or "todos"):
+                resposta = self.client.get(self.endereco, {"status": status} if status else {})
+
+                self.assertEqual(self.numeros(resposta), numeros)
+                self.assertEqual(
+                    [(filtro["rotulo"], filtro["quantidade"]) for filtro in resposta.context["filtros"]],
+                    [("Todos", 4), ("Aguardando retirada", 2), ("Retirados", 1), ("Cancelados", 1)],
+                )
+                ativos = [filtro["rotulo"] for filtro in resposta.context["filtros"] if filtro["ativo"]]
+                self.assertEqual(len(ativos), 1)
+
+        resposta = self.client.get(self.endereco, {"status": StatusDeVenda.RETIRADA})
+        self.assertContains(resposta, "Todos (4)")
+        self.assertContains(resposta, "Aguardando retirada (2)")
+        self.assertContains(resposta, 'class="filtro-categoria ativo"')
+        self.assertContains(resposta, "Retirados (1)</a>")
+
+    def test_status_desconhecido_mostra_todos(self):
+        self.pedido()
+
+        resposta = self.client.get(self.endereco, {"status": "concluida"})
+
+        self.assertEqual(resposta.context["status_atual"], "")
+        self.assertEqual(len(self.numeros(resposta)), 1)
+
+    def test_filtro_sem_resultados_tem_mensagem_propria(self):
+        self.pedido()
+
+        resposta = self.client.get(self.endereco, {"status": StatusDeVenda.CANCELADA})
+
+        self.assertContains(resposta, "Nenhum pedido com esse status")
+        self.assertNotContains(resposta, "Você ainda não fez nenhum pedido")
+        self.assertContains(resposta, "Cancelados (0)")
+
+    def test_cliente_sem_pedidos_ve_a_mensagem_de_primeira_compra_sem_filtros(self):
+        resposta = self.client.get(self.endereco)
+
+        self.assertContains(resposta, "Você ainda não fez nenhum pedido")
+        self.assertNotContains(resposta, "Nenhum pedido com esse status")
+        self.assertNotContains(resposta, "Todos (0)")
+
+    def test_aguardando_retirada_mostra_local_e_horario(self):
+        self.pedido()
+
+        with self.settings(LOJA_ENDERECO="Rua das Flores, 100", LOJA_HORARIO="Seg. a sáb., 9h às 18h"):
+            resposta = self.client.get(self.endereco)
+
+        self.assertContains(resposta, "Rua das Flores, 100 · Seg. a sáb., 9h às 18h")
+
+    def test_retirado_mostra_a_data_da_retirada_no_fuso_da_loja(self):
+        pedido = self.pedido()
+        marcar_retirado(pedido, self.vendedor)
+        # 23h30 de 10/11 em São Paulo já é dia 11/11 em UTC: a tela precisa mostrar 10/11.
+        retirada = timezone.make_aware(datetime(2026, 11, 10, 23, 30))
+        Venda.objects.filter(pk=pedido.pk).update(retirada_em=retirada)
+
+        resposta = self.client.get(self.endereco)
+
+        self.assertContains(resposta, "Retirado em 10/11/2026")
+        self.assertNotContains(resposta, "Retire na loja")
+
+    def test_cancelado_mostra_total_riscado_e_observacao(self):
+        pedido = self.pedido()
+        cancelar_venda(pedido, self.vendedor)
+
+        resposta = self.client.get(self.endereco)
+
+        self.assertContains(
+            resposta, "Pedido cancelado: os itens voltaram ao estoque e o valor não foi cobrado."
+        )
+        self.assertContains(resposta, '<s class="text-body-secondary" data-teste="total-riscado">R$ 349,90</s>',
+                            html=True)
+        self.assertNotContains(resposta, "Retire na loja")
+
+    def test_contagem_por_status_numa_consulta_e_zerada_sem_cliente(self):
+        self.pedido()
+        usuario = User.objects.get(pk=self.usuario.pk)  # sem o cliente já carregado em memória
+
+        with self.assertNumQueries(2):  # cliente da conta + uma agregação para todos os contadores
+            contagem = contagem_por_status(usuario)
+
+        self.assertEqual(contagem["todos"], 1)
+        self.assertEqual(contagem[StatusDeVenda.AGUARDANDO_RETIRADA], 1)
+        sem_cliente = User.objects.create_user("avulso", "avulso@exemplo.com", "SenhaForte123!")
+        self.assertEqual(contagem_por_status(sem_cliente)["todos"], 0)
+        self.assertFalse(pedidos_do_cliente(AnonymousUser()).exists())
+
+
+class HistoricoDoClienteNoAdminTests(TestCase):
+    """HU15: o administrador vê o histórico de cada cliente na página dele no Admin."""
+
+    @classmethod
+    def setUpTestData(cls):
+        call_command("criar_perfis", verbosity=0)
+        categoria = Categoria.objects.create(nome="Corrida")
+        cls.tenis = Produto.objects.create(
+            codigo="100110", nome="Tênis de corrida", categoria=categoria,
+            preco=Decimal("349.90"), estoque_atual=50,
+        )
+        cls.gerente = User.objects.create_user("carla", "carla@exemplo.com", "SenhaForte123!", is_staff=True)
+        cls.gerente.groups.add(Group.objects.get(name=PERFIL_ADMINISTRADOR))
+        _, cls.cliente = cadastrar_cliente("Marina Silva", "marina@exemplo.com", "1699999999", "SenhaForte123!")
+        _, cls.outro = cadastrar_cliente("João Souza", "joao@exemplo.com", "1688888888", "SenhaForte123!")
+
+    def setUp(self):
+        self.client.force_login(self.gerente)
+        self.pedido = registrar_pedido_online(self.cliente, [(self.tenis, 2)], FormaDePagamento.PIX)
+        self.alheio = registrar_pedido_online(self.outro, [(self.tenis, 1)], FormaDePagamento.CARTAO)
+        cancelar_venda(self.pedido, self.gerente)
+        self.pagina = reverse("admin:clientes_cliente_change", args=[self.cliente.pk])
+
+    def test_pagina_do_cliente_lista_os_pedidos_dele(self):
+        resposta = self.client.get(self.pagina)
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertContains(resposta, "Pedidos online")
+        self.assertContains(resposta, "#0001")
+        self.assertContains(resposta, "Cancelada")
+        self.assertContains(resposta, "699,80")
+        self.assertNotContains(resposta, "#0002")
+        self.assertContains(resposta, reverse("admin:loja_pedidoonline_change", args=[self.pedido.pk]))
+
+    def test_lista_e_somente_leitura_sem_adicionar_nem_excluir(self):
+        resposta = self.client.get(self.pagina)
+        conteudo = resposta.content.decode()
+
+        self.assertNotIn('name="pedidos-0-status"', conteudo)
+        self.assertNotIn('name="pedidos-0-total"', conteudo)
+        self.assertNotIn('name="pedidos-0-DELETE"', conteudo)
+        self.assertNotIn("Adicionar outro(a) pedido", conteudo)
+
+        inline = ClienteAdmin(Cliente, admin.site).get_inline_instances(resposta.wsgi_request, self.cliente)[0]
+        self.assertFalse(inline.has_add_permission(resposta.wsgi_request, self.cliente))
+        self.assertFalse(inline.has_change_permission(resposta.wsgi_request, self.cliente))
+        self.assertFalse(inline.can_delete)
