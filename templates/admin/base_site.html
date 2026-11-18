@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+{% comment %}
+Cabeçalho do Django Admin com o link "Relatórios" (pacote 4.7).
+
+O administrador entra direto no Admin depois do login, e o Admin não usa o base.html do site.
+Sem este link, ele não tinha como chegar à tela /relatorios/ sem digitar o endereço.
+{% endcomment %}
+
+{% block userlinks %}
+  {% if pode_ver_relatorios %}<a href="{% url 'relatorios:painel' %}">Relatórios</a> /{% endif %}
+  {{ block.super }}
+{% endblock %}

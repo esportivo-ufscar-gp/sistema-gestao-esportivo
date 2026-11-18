@@ -34,12 +34,8 @@ def cadastro(request):
                 messages.success(request, f"Conta criada com sucesso! Seja bem-vindo(a), {cliente.nome}.")
                 return redirect(destino_apos_login(usuario))
             except ValidationError as erro:
-                if hasattr(erro, "message_dict"):
-                    for campo, mensagens in erro.message_dict.items():
-                        for msg in mensagens:
-                            form.add_error(campo, msg)
-                else:
-                    form.add_error(None, erro.message)
+                # Erros com campo (e-mail, senha) vão para o campo; os demais, para o topo do formulário.
+                form.add_error(None, erro)
     else:
         form = FormularioDeCadastroCliente()
 

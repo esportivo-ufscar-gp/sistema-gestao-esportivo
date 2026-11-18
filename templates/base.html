@@ -17,6 +17,9 @@
       <a class="navbar-brand fw-semibold" href="{% url 'core:home' %}">Esportivo UFSCar</a>
       <div class="d-flex align-items-center gap-3">
         {% if user.is_authenticated %}
+          {% if pode_ver_relatorios %}
+            <a class="btn btn-outline-light btn-sm" href="{% url 'relatorios:painel' %}">Relatórios</a>
+          {% endif %}
           <span class="navbar-text">Olá, {{ user.get_username }}</span>
           {% if user.is_staff %}
             <a class="btn btn-outline-light btn-sm" href="{% url 'admin:index' %}">Administração</a>

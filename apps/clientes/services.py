@@ -4,7 +4,7 @@ Regras de negócio do módulo Clientes.
 Pacote 4.6: cadastro com consentimento LGPD (4.6.1) e histórico de compras (4.6.2).
 Pacote 4.5.3: identificação do cliente no checkout da loja online.
 """
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -61,6 +61,15 @@ def cadastrar_cliente(nome, email, telefone, senha):
         or Cliente.objects.filter(email__iexact=email_limpo).exists()
     ):
         raise ValidationError({"email": "Já existe uma conta cadastrada com este e-mail."})
+
+    # Mesmas regras de senha do settings (mínimo de 8 caracteres, não comum, não só números e
+    # diferente do nome e do e-mail). Sem isso, a tela aceitava qualquer senha, até "1".
+    try:
+        password_validation.validate_password(
+            senha, user=Usuario(username=email_limpo, email=email_limpo, first_name=nome)
+        )
+    except ValidationError as erro:
+        raise ValidationError({"senha": erro.messages})
 
     with transaction.atomic():
         usuario = Usuario.objects.create_user(
