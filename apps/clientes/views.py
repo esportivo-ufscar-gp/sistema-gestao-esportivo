@@ -2,17 +2,28 @@
 Views do módulo Clientes.
 
 Pacote 4.6.1: cadastro de cliente com consentimento LGPD (HU14).
+Pacote 4.6.2: histórico de compras, "Meus pedidos" (HU15).
 """
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
 from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
+from django.urls import reverse
 
 from apps.contas.decorators import perfil_requerido
-from apps.clientes.services import pedidos_do_cliente
-from apps.contas.services import destino_apos_login
+from apps.contas.services import PERFIL_CLIENTE, destino_apos_login
+from apps.vendas.models import StatusDeVenda
+
 from .forms import FormularioDeCadastroCliente
-from .services import cadastrar_cliente
+from .services import STATUS_DO_HISTORICO, cadastrar_cliente, contagem_por_status, pedidos_do_cliente
+
+# Texto de cada botão de filtro de "Meus pedidos", na ordem da tela.
+ROTULOS_DOS_FILTROS = {
+    StatusDeVenda.AGUARDANDO_RETIRADA: "Aguardando retirada",
+    StatusDeVenda.RETIRADA: "Retirados",
+    StatusDeVenda.CANCELADA: "Cancelados",
+}
 
 
 def cadastro(request):
@@ -42,29 +53,40 @@ def cadastro(request):
     return render(request, "clientes/cadastro.html", {"form": form})
 
 
-@perfil_requerido('cliente')
+@perfil_requerido(PERFIL_CLIENTE)
 def meus_pedidos(request):
     """
-    Exibe a tela 'Meus pedidos' para o cliente autenticado,
-    com suporte a filtros por status e contadores.
+    Tela "Meus pedidos" (HU15): os pedidos online do cliente logado, com filtro por status.
+
+    A equipe recebe 403 e o visitante vai para a tela de entrada (perfil_requerido).
     """
-    status_filtro = request.GET.get('status', '')
-    if status_filtro not in ['aguardando_retirada', 'retirada', 'cancelada']:
-        status_filtro = None
+    status = request.GET.get("status", "")
+    if status not in STATUS_DO_HISTORICO:
+        status = ""
 
-    pedidos = pedidos_do_cliente(request.user, status=status_filtro)
-    todos_pedidos = pedidos_do_cliente(request.user)
+    contagem = contagem_por_status(request.user)
 
-    counts = {
-        'todos': todos_pedidos.count(),
-        'aguardando': todos_pedidos.filter(status='aguardando_retirada').count(),
-        'retirados': todos_pedidos.filter(status='retirada').count(),
-        'cancelados': todos_pedidos.filter(status='cancelada').count(),
-    }
+    return render(request, "clientes/meus_pedidos.html", {
+        "pedidos": pedidos_do_cliente(request.user, status=status),
+        "status_atual": status,
+        "filtros": _filtros(contagem, status),
+        "tem_pedidos": contagem["todos"] > 0,
+        "loja_endereco": settings.LOJA_ENDERECO,
+        "loja_horario": settings.LOJA_HORARIO,
+    })
 
-    context = {
-        'pedidos': pedidos,
-        'status_atual': status_filtro or '',
-        'counts': counts,
-    }
-    return render(request, 'clientes/meus_pedidos.html', context)
+
+def _filtros(contagem, status_atual):
+    """Botões "Todos (N)" e um por status, com o endereço e a marca do filtro ativo."""
+    endereco = reverse("clientes:meus_pedidos")
+    filtros = [{"rotulo": "Todos", "quantidade": contagem["todos"], "url": endereco, "ativo": not status_atual}]
+    filtros += [
+        {
+            "rotulo": ROTULOS_DOS_FILTROS[status],
+            "quantidade": contagem[status],
+            "url": f"{endereco}?status={status}",
+            "ativo": status == status_atual,
+        }
+        for status in STATUS_DO_HISTORICO
+    ]
+    return filtros

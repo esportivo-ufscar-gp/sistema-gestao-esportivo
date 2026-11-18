@@ -8,9 +8,8 @@ from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
-from apps.vendas.models import Venda
 
 from apps.contas.services import (
     PERFIL_ADMINISTRADOR,
@@ -19,11 +18,15 @@ from apps.contas.services import (
     PERFIL_VENDEDOR,
     perfil_do_usuario,
 )
+from apps.vendas.models import StatusDeVenda, Venda
 from .models import Cliente
 
 Usuario = get_user_model()
 
 PERFIS_DA_EQUIPE = (PERFIL_ADMINISTRADOR, PERFIL_VENDEDOR, PERFIL_ESTOQUISTA)
+
+# Os status que um pedido online pode ter, na ordem dos filtros de "Meus pedidos" (HU15).
+STATUS_DO_HISTORICO = (StatusDeVenda.AGUARDANDO_RETIRADA, StatusDeVenda.RETIRADA, StatusDeVenda.CANCELADA)
 
 
 class ErroDeIdentificacao(Exception):
@@ -177,22 +180,35 @@ def cliente_do_checkout(usuario, dados_do_visitante=None):
     return identificar_visitante(**dados_do_visitante)
 
 
+# ------------------------------------------------------------------ Histórico de compras (4.6.2)
 def pedidos_do_cliente(usuario, status=None):
     """
-    Retorna a lista de pedidos do canal online do cliente associado ao usuário informado,
-    ordenados do mais recente para o mais antigo, com os itens e produtos pré-carregados.
-    Permite filtragem opcional por status ('aguardando_retirada', 'retirada', 'cancelada').
+    Pedidos da loja online do cliente da conta, do mais recente para o mais antigo (HU15).
+
+    Só o canal online: as vendas do PDV não identificam o cliente e não entram no histórico.
+    `status` filtra por um dos STATUS_DO_HISTORICO; qualquer outro valor traz todos.
     """
-    if not hasattr(usuario, 'cliente') or not usuario.cliente:
+    cliente = getattr(usuario, "cliente", None)  # conta sem cadastro de cliente não tem pedidos
+    if cliente is None:
         return Venda.objects.none()
 
-    qs = (
-        Venda.objects.filter(cliente=usuario.cliente, canal='online')
-        .prefetch_related('itens', 'itens__produto')
-        .order_by('-criado_em')
+    pedidos = (
+        Venda.objects.online()
+        .filter(cliente=cliente)
+        .prefetch_related("itens__produto")
+        .order_by("-criado_em", "-id")
     )
 
-    if status in ['aguardando_retirada', 'retirada', 'cancelada']:
-        qs = qs.filter(status=status)
+    if status in STATUS_DO_HISTORICO:
+        pedidos = pedidos.filter(status=status)
 
-    return qs
+    return pedidos
+
+
+def contagem_por_status(usuario):
+    """Quantos pedidos o cliente tem no total ("todos") e em cada status, numa consulta só."""
+    contagem = pedidos_do_cliente(usuario).order_by().aggregate(
+        todos=Count("id"),
+        **{status: Count("id", filter=Q(status=status)) for status in STATUS_DO_HISTORICO},
+    )
+    return contagem
