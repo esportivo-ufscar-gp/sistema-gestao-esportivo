@@ -5,40 +5,52 @@ Monta um banco pronto para apresentar ao patrocinador: um usuário de cada perfi
 de exemplo e um mês de vendas nos dois canais, com alguns cancelamentos e retiradas, para os
 relatórios (4.7) e o painel de estoque terem o que mostrar.
 
-Tudo passa pelos serviços do sistema: as vendas baixam estoque, os cancelamentos estornam e
-as compras entram como movimento de entrada. Só as datas são ajustadas depois: as vendas se
-espalham pelos últimos 30 dias, em horário comercial, e a compra inicial fica antes delas.
+Tudo passa pelos serviços do sistema: o saldo inicial do catálogo e as compras entram como
+movimento de entrada, as vendas baixam estoque e os cancelamentos estornam. Assim, para cada
+produto, a soma dos movimentos é igual ao saldo. Só as datas são ajustadas depois: as vendas
+se espalham pelos últimos 30 dias, em horário comercial, e o saldo inicial e a compra ficam
+antes delas.
+
+Não existe senha padrão: quem chama informa a senha (o comando popular_demonstracao a recebe
+de --senha ou de DEMO_SENHA, ou gera uma aleatória). O repositório é público, e uma senha
+escrita aqui abriria o Admin do ambiente hospedado para qualquer pessoa.
 """
 import random
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
+from pathlib import Path
 
+from django.apps import apps
 from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.models import Group
+from django.core import serializers
 from django.core.exceptions import ValidationError
-from django.core.management import call_command
-from django.db import transaction
-from django.db.models import F
+from django.core.management.color import no_style
+from django.db import connection, transaction
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from apps.clientes.models import Cliente
 from apps.clientes.services import cadastrar_cliente
 from apps.contas.services import PERFIL_ADMINISTRADOR, PERFIL_ESTOQUISTA, PERFIL_VENDEDOR, criar_perfis
-from apps.estoque.models import MovimentoEstoque
+from apps.estoque.models import TIPOS_DE_ENTRADA, MovimentoEstoque
 from apps.estoque.services import registrar_entrada
-from apps.produtos.models import Produto
+from apps.produtos.models import Categoria, Produto
 from apps.vendas.models import FormaDePagamento, Venda
 from apps.vendas.services import cancelar_venda, marcar_retirado, registrar_pedido_online, registrar_venda_pdv
 
-SENHA_PADRAO = "demo-esportivo-2026"
 DIAS_DE_HISTORICO = 30
 COMPRA_INICIAL = 40  # unidades compradas de cada produto com saldo acima do mínimo
+FIXTURE_DO_CATALOGO = "dados_exemplo.json"
+MOTIVO_SALDO_INICIAL = "Saldo inicial"
 
 EQUIPE = (
-    # e-mail, nome de usuário, nome, perfil, membro da equipe (Admin)
-    ("admin@esportivo.demo", "carla", "Carla Mendes", PERFIL_ADMINISTRADOR, True),
-    ("vendedor@esportivo.demo", "ana", "Ana Lima", PERFIL_VENDEDOR, False),
-    ("estoquista@esportivo.demo", "bruno", "Bruno Costa", PERFIL_ESTOQUISTA, False),
+    # e-mail, nome de usuário, nome, perfil. Todos entram no Admin (is_staff), e cada um vê lá
+    # só o que as permissões do seu perfil liberam: o vendedor consulta vendas, o estoquista
+    # consulta e registra movimentos.
+    ("admin@esportivo.demo", "carla", "Carla Mendes", PERFIL_ADMINISTRADOR),
+    ("vendedor@esportivo.demo", "ana", "Ana Lima", PERFIL_VENDEDOR),
+    ("estoquista@esportivo.demo", "bruno", "Bruno Costa", PERFIL_ESTOQUISTA),
 )
 
 CLIENTES = (
@@ -49,7 +61,7 @@ CLIENTES = (
 
 
 class ErroDeDemonstracao(Exception):
-    """Banco com vendas ou sem saldo para gerar a demonstração."""
+    """O banco não está pronto para a demonstração, ou a senha não serve."""
 
 
 @dataclass
@@ -60,15 +72,40 @@ class Resumo:
     canceladas: int = 0
 
 
+def emails_da_demonstracao():
+    """E-mails das contas que a demonstração cria: a equipe e os clientes."""
+    return [dados[0] for dados in EQUIPE] + [dados[1] for dados in CLIENTES]
+
+
+def saldo_pelos_movimentos(produto):
+    """Entradas e estornos somam; saídas por venda e ajustes subtraem."""
+    totais = produto.movimentos.aggregate(
+        entradas=Sum("quantidade", filter=Q(tipo__in=TIPOS_DE_ENTRADA), default=0),
+        saidas=Sum("quantidade", filter=~Q(tipo__in=TIPOS_DE_ENTRADA), default=0),
+    )
+    return totais["entradas"] - totais["saidas"]
+
+
 @transaction.atomic
-def popular(senha=SENHA_PADRAO, vendas_pdv=40, pedidos_online=15, semente=2026):
+def popular(senha, vendas_pdv=40, pedidos_online=15, semente=2026):
     """
     Cria os dados de demonstração e devolve um Resumo.
 
-    A `semente` deixa o resultado igual a cada execução, para a demonstração ser previsível.
+    Recusa, sem gravar nada, um banco que já tem vendas, contas com os e-mails da demonstração
+    ou produtos com saldo sem histórico, e também uma senha que não passe nos validadores do
+    Django. A `semente` deixa o resultado igual a cada execução, para a demonstração ser
+    previsível.
     """
     if Venda.objects.exists():
         raise ErroDeDemonstracao("O banco já tem vendas. Use um banco novo para os dados de demonstração.")
+
+    existentes = _contas_ja_existentes()
+    if existentes:
+        raise ErroDeDemonstracao(
+            "Já existem contas com os dados da demonstração: " + ", ".join(existentes) + ". "
+            "O comando não reaproveita contas existentes; use um banco novo."
+        )
+
     try:
         password_validation.validate_password(senha)
     except ValidationError as erro:
@@ -78,12 +115,11 @@ def popular(senha=SENHA_PADRAO, vendas_pdv=40, pedidos_online=15, semente=2026):
     resumo = Resumo()
 
     criar_perfis()
-    if not Produto.objects.exists():
-        call_command("loaddata", "dados_exemplo", verbosity=0)
-
     equipe = {dados[3]: _membro_da_equipe(senha, *dados, resumo=resumo) for dados in EQUIPE}
     clientes = [_cliente(senha, *dados, resumo=resumo) for dados in CLIENTES]
     estoquista, vendedor, admin = equipe[PERFIL_ESTOQUISTA], equipe[PERFIL_VENDEDOR], equipe[PERFIL_ADMINISTRADOR]
+
+    saldos_iniciais = _prepara_catalogo(estoquista)
 
     # Produtos já abaixo do mínimo ficam como estão: é o que o relatório de estoque destaca.
     vendaveis = list(Produto.objects.filter(ativo=True, estoque_atual__gt=F("estoque_minimo")).order_by("id"))
@@ -114,9 +150,13 @@ def popular(senha=SENHA_PADRAO, vendas_pdv=40, pedidos_online=15, semente=2026):
         Venda.objects.filter(pk=venda.pk).update(criado_em=quando)
         MovimentoEstoque.objects.filter(venda=venda).update(criado_em=quando)
 
-    # A compra inicial vem antes da primeira venda, para o histórico de estoque fazer sentido.
-    inicio = timezone.make_aware(datetime.combine(_dia(agora, DIAS_DE_HISTORICO), time(8, 0)))
-    MovimentoEstoque.objects.filter(pk__in=[compra.pk for compra in compras]).update(criado_em=inicio)
+    # O saldo inicial vem um dia antes da compra, e a compra antes da primeira venda, para o
+    # histórico de estoque ficar em ordem cronológica.
+    compra_em = timezone.make_aware(datetime.combine(_dia(agora, DIAS_DE_HISTORICO), time(8, 0)))
+    MovimentoEstoque.objects.filter(pk__in=[compra.pk for compra in compras]).update(criado_em=compra_em)
+    MovimentoEstoque.objects.filter(pk__in=[entrada.pk for entrada in saldos_iniciais]).update(
+        criado_em=compra_em - timedelta(days=1)
+    )
 
     # Metade dos pedidos online já foi retirada; os demais aguardam retirada na loja.
     for pedido in online[: len(online) // 2]:
@@ -131,24 +171,91 @@ def popular(senha=SENHA_PADRAO, vendas_pdv=40, pedidos_online=15, semente=2026):
     return resumo
 
 
-def _membro_da_equipe(senha, email, nome_de_usuario, nome, perfil, staff, resumo):
+def _contas_ja_existentes():
+    """E-mails e nomes de usuário da demonstração que já estão em uso, em ordem alfabética."""
     Usuario = get_user_model()
-    usuario = Usuario.objects.filter(email__iexact=email).first()
-    if usuario is None:
-        usuario = Usuario.objects.create_user(
-            username=nome_de_usuario, email=email, password=senha, first_name=nome, is_staff=staff,
-        )
-        resumo.usuarios.append(email)
+    procurados = emails_da_demonstracao() + [dados[1] for dados in EQUIPE]
+
+    em_uso = set()
+    for valor in procurados:
+        if (
+            Usuario.objects.filter(Q(email__iexact=valor) | Q(username__iexact=valor)).exists()
+            or Cliente.objects.filter(email__iexact=valor).exists()
+        ):
+            em_uso.add(valor)
+    return sorted(em_uso)
+
+
+def _membro_da_equipe(senha, email, nome_de_usuario, nome, perfil, resumo):
+    usuario = get_user_model().objects.create_user(
+        username=nome_de_usuario, email=email, password=senha, first_name=nome, is_staff=True,
+    )
     usuario.groups.add(Group.objects.get(name=perfil))
+    resumo.usuarios.append(email)
     return usuario
 
 
 def _cliente(senha, nome, email, telefone, resumo):
-    cliente = Cliente.objects.filter(email__iexact=email).first()
-    if cliente is None:
-        _, cliente = cadastrar_cliente(nome, email, telefone, senha)
-        resumo.usuarios.append(email)
+    _, cliente = cadastrar_cliente(nome, email, telefone, senha)
+    resumo.usuarios.append(email)
     return cliente
+
+
+def _prepara_catalogo(estoquista):
+    """
+    Garante um catálogo cujo saldo é explicado pelos movimentos e devolve as entradas de saldo
+    inicial que criou.
+
+    Banco sem produtos: carrega o catálogo de exemplo com saldo zero e dá entrada no saldo de
+    cada produto pelo serviço de estoque, com o motivo "Saldo inicial". Banco com produtos: só
+    segue se o saldo de cada um bater com o histórico, para a demonstração não herdar um saldo
+    que nenhum movimento explica.
+    """
+    if Produto.objects.exists():
+        sem_historico = [
+            produto.nome for produto in Produto.objects.order_by("nome")
+            if produto.estoque_atual != saldo_pelos_movimentos(produto)
+        ]
+        if sem_historico:
+            raise ErroDeDemonstracao(
+                "Estes produtos têm saldo sem movimento de estoque que o explique: "
+                + ", ".join(sem_historico) + ". Use um banco novo para os dados de demonstração."
+            )
+        return []
+
+    saldos = _carrega_catalogo_sem_saldo()
+    return [
+        registrar_entrada(produto, saldos[produto.pk], usuario=estoquista, motivo=MOTIVO_SALDO_INICIAL)
+        for produto in Produto.objects.filter(pk__in=saldos).order_by("id")
+        if saldos[produto.pk] > 0
+    ]
+
+
+def _carrega_catalogo_sem_saldo():
+    """
+    Grava as categorias e os produtos da fixture com saldo zero e devolve {id: saldo da fixture}.
+
+    O saldo nunca é gravado direto no produto (CLAUDE.md): ele entra em seguida pelo serviço de
+    estoque. Por isso a fixture é lida aqui, e não com loaddata, que gravaria o saldo pronto.
+    """
+    caminho = Path(apps.get_app_config("produtos").path) / "fixtures" / FIXTURE_DO_CATALOGO
+    saldos = {}
+
+    with caminho.open(encoding="utf-8") as arquivo:
+        for registro in serializers.deserialize("json", arquivo):
+            objeto = registro.object
+            if isinstance(objeto, Produto):
+                saldos[objeto.pk] = objeto.estoque_atual
+                objeto.estoque_atual = 0
+            registro.save()
+
+    # A fixture traz os ids prontos; como no loaddata, o contador de ids do banco é ajustado
+    # para os próximos cadastros não repetirem um id já usado.
+    with connection.cursor() as cursor:
+        for comando in connection.ops.sequence_reset_sql(no_style(), [Categoria, Produto]):
+            cursor.execute(comando)
+
+    return saldos
 
 
 def _dia(agora, dias_atras):
