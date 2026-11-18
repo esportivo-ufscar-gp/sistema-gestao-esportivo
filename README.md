@@ -68,20 +68,37 @@ Acesse http://localhost:8000 e a administração em http://localhost:8000/admin.
 
 ### Dados de demonstração (pacote 3.3)
 
-Para apresentar o sistema, rode em um banco recém-migrado e ainda sem vendas:
+Para apresentar o sistema, rode em um banco recém-migrado, ainda sem vendas e sem as contas da
+demonstração:
 
 ```bash
 python manage.py migrate
-python manage.py popular_demonstracao              # senha padrão: demo-esportivo-2026
-python manage.py popular_demonstracao --senha XYZ  # em ambiente publicado, use outra senha
+python manage.py popular_demonstracao
 ```
 
-O comando cria os perfis, um usuário de cada perfil (`admin@esportivo.demo`,
-`vendedor@esportivo.demo`, `estoquista@esportivo.demo` e a cliente `marina@esportivo.demo`),
-carrega o catálogo de exemplo se ele ainda não existir e registra um mês de vendas nos dois
-canais, com retiradas e cancelamentos. Tudo passa pelos serviços de estoque e de vendas. A
-`--senha` segue as mesmas regras do cadastro de cliente (mínimo de 8 caracteres, não pode ser
-comum nem só números).
+Não existe senha padrão, porque o repositório é público. A senha dos usuários de demonstração
+vem, nesta ordem:
+
+1. da opção `--senha`;
+2. da variável de ambiente `DEMO_SENHA` (a forma recomendada no ambiente hospedado, porque o
+   que vai na linha de comando fica no histórico do terminal);
+3. se nenhuma das duas for informada, de uma senha aleatória gerada pelo comando e mostrada
+   **uma única vez** no fim da saída. Anote-a nesse momento.
+
+A senha informada segue as mesmas regras do cadastro de cliente (mínimo de 8 caracteres, não
+pode ser comum nem só números); uma senha fraca é recusada antes de gravar qualquer dado.
+
+O comando cria os perfis e um usuário de cada perfil (`admin@esportivo.demo`,
+`vendedor@esportivo.demo`, `estoquista@esportivo.demo` e a cliente `marina@esportivo.demo`). A
+equipe entra no Admin e vê lá só o que o seu perfil permite. Se o banco não tiver produtos, o
+comando carrega o catálogo de exemplo com saldo zero e dá entrada no saldo de cada produto pelo
+serviço de estoque, com o motivo "Saldo inicial". Depois, registra um mês de vendas nos dois
+canais, com retiradas e cancelamentos. Tudo passa pelos serviços de estoque e de vendas, então,
+para cada produto, a soma dos movimentos é igual ao saldo.
+
+O comando não grava nada e explica o motivo quando o banco já tem vendas, quando algum e-mail
+da demonstração já está em uso ou quando há produto com saldo sem movimento de estoque que o
+explique (por exemplo, depois de um `loaddata dados_exemplo`).
 
 ### Relatórios (pacote 4.7)
 
