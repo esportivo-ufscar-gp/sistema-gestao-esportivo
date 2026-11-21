@@ -163,6 +163,15 @@ A meta de cobertura das regras de negócio é de 70% nos sprints intermediários
 final (configurada em `.coveragerc`, que já exige 80% a partir do Sprint 4). Para o relatório
 de cobertura (pacote 5.2), gere também a versão em HTML com `coverage html` (pasta `htmlcov/`).
 
+## Documentação do projeto
+
+- [Roteiro de testes ponta a ponta](docs/Roteiro_Testes_Ponta_a_Ponta_5.1.docx) (pacote 5.1): 33 casos de
+  teste manuais que percorrem o sistema no navegador, do cadastro de um produto até a venda nos dois
+  canais, o cancelamento, o histórico do cliente e os relatórios, com foco no estoque compartilhado.
+- [Documentação técnica](docs/Documentacao_Tecnica_6.1.docx) (pacote 6.1): descreve o sistema como foi
+  construído, com tecnologias, arquitetura, modelo de dados, regras de negócio, perfis, configuração,
+  instalação, qualidade e publicação.
+
 ## Fluxo de trabalho
 
 1. Cada pacote de trabalho da EAP é uma issue no quadro do projeto.
