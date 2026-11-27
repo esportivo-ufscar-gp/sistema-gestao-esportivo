@@ -5,22 +5,16 @@ Valores sensíveis e que mudam entre ambientes vêm de variáveis de ambiente, l
 arquivo .env (veja .env.example). Nunca envie o .env para o repositório.
 """
 import os
+import warnings
 from pathlib import Path
 
 from django.contrib import messages
 from dotenv import load_dotenv
 
+from .ambiente import banco_de_dados, enderecos_publicos, env_bool
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
-
-
-def env_bool(nome, padrao=False):
-    return os.getenv(nome, str(padrao)).strip().lower() in ("1", "true", "sim", "yes")
-
-
-def env_list(nome, padrao=""):
-    return [item.strip() for item in os.getenv(nome, padrao).split(",") if item.strip()]
-
 
 # ------------------------------------------------------------------ Segurança
 DEBUG = env_bool("DJANGO_DEBUG", False)
@@ -32,7 +26,16 @@ if not SECRET_KEY:
     else:
         raise RuntimeError("Defina DJANGO_SECRET_KEY no arquivo .env")
 
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+# Inclui sozinho o endereço que o Render dá ao site (pacote 3.3); veja config/ambiente.py.
+ALLOWED_HOSTS, CSRF_TRUSTED_ORIGINS = enderecos_publicos()
+
+# Atrás de um proxy com HTTPS (o Render é um), o Django só sabe que a conexão é segura pelo
+# cabeçalho que o proxy envia. Com isso, os cookies de sessão e de CSRF só trafegam por HTTPS.
+# O próprio Render já redireciona http:// para https://.
+if env_bool("DJANGO_ATRAS_DE_PROXY_HTTPS", env_bool("RENDER")):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # ------------------------------------------------------------------ Aplicações
 DJANGO_APPS = [
@@ -60,6 +63,9 @@ INSTALLED_APPS = DJANGO_APPS + PROJECT_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serve o CSS e o JS em produção, sem servidor separado (logo depois do SecurityMiddleware,
+    # como pede a documentação do WhiteNoise).
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -96,25 +102,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 # ------------------------------------------------------------------ Banco de dados
 # PostgreSQL é o banco oficial do projeto. DB_ENGINE=sqlite é só um atalho para
 # começar sem PostgreSQL instalado; os testes de concorrência de estoque (pacote 4.3.2)
-# precisam do PostgreSQL, que é o banco usado na integração contínua.
-if os.getenv("DB_ENGINE", "postgresql") == "sqlite":
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("DB_NAME", "esportivo"),
-            "USER": os.getenv("DB_USER", "postgres"),
-            "PASSWORD": os.getenv("DB_PASSWORD", ""),
-            "HOST": os.getenv("DB_HOST", "localhost"),
-            "PORT": os.getenv("DB_PORT", "5432"),
-        }
-    }
+# precisam do PostgreSQL, que é o banco usado na integração contínua. No Render, a conexão
+# vem pronta na DATABASE_URL (pacote 3.3).
+DATABASES = {"default": banco_de_dados(BASE_DIR)}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -147,6 +137,17 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# O collectstatic do deploy junta os arquivos em STATIC_ROOT, e o WhiteNoise os serve já
+# comprimidos. Sem o "Manifest" no nome: assim os testes não precisam rodar o collectstatic.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
+
+# Fora do deploy (testes e uso local) a pasta staticfiles/ não existe, porque o collectstatic só
+# roda no build; o WhiteNoise avisaria isso a cada execução. Só esse aviso é silenciado.
+warnings.filterwarnings("ignore", message=r"No directory at: .*staticfiles")
 
 MEDIA_URL = "media/"          # imagens de produtos (pacote 4.2.2)
 MEDIA_ROOT = BASE_DIR / "media"

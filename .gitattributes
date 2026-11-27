@@ -1,0 +1,3 @@
+# Scripts de shell rodam no Linux do Render (build.sh): sempre com fim de linha LF, mesmo
+# quando editados no Windows. Com CRLF, o bash falharia logo na primeira linha.
+*.sh text eol=lf

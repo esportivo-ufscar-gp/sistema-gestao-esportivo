@@ -13,11 +13,12 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.clientes.models import Cliente
+from config.ambiente import banco_da_url, banco_de_dados, enderecos_publicos, env_bool, env_list
 from apps.estoque.models import MovimentoEstoque, TipoDeMovimento
 from apps.estoque.services import produtos_em_alerta
 from apps.produtos.models import Produto
@@ -296,3 +297,143 @@ class DadosDeDemonstracaoTests(TestCase):
             self.assertIn(email, saida)
         with self.assertRaises(CommandError):
             self.comando("--senha", self.SENHA)
+
+    def test_se_vazio_carrega_no_primeiro_deploy_e_nao_faz_nada_nos_seguintes(self):
+        primeira = self.comando("--se-vazio", ambiente={"DEMO_SENHA": "Senha-Do-Ambiente-42"})
+        vendas = Venda.objects.count()
+        usuarios = User.objects.count()
+
+        segunda = self.comando("--se-vazio", ambiente={"DEMO_SENHA": "Outra-Senha-Forte-77"})
+
+        self.assertIn("Dados de demonstração carregados.", primeira)
+        self.assertIn("não foram carregados de novo", segunda)
+        self.assertEqual(Venda.objects.count(), vendas)
+        self.assertEqual(User.objects.count(), usuarios)
+        self.assertTrue(self.entra("admin@esportivo.demo", "Senha-Do-Ambiente-42"))
+
+    def test_se_vazio_nao_esconde_os_outros_erros(self):
+        with self.assertRaisesMessage(CommandError, "Senha fraca"):
+            self.comando("--se-vazio", "--senha", "12345678")
+        self.nada_foi_gravado()
+
+
+# ------------------------------------------------------------------ Hospedagem (pacote 3.3)
+class ConfiguracaoDoAmbienteTests(SimpleTestCase):
+    """config/ambiente.py: o que o settings lê das variáveis de ambiente, no Render e no .env."""
+
+    def test_database_url_do_render_vira_a_configuracao_do_django(self):
+        banco = banco_da_url("postgresql://esportivo:s%40nha%2F1@dpg-abc123-a:5432/esportivo?sslmode=require")
+
+        self.assertEqual(banco, {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": "esportivo",
+            "USER": "esportivo",
+            "PASSWORD": "s@nha/1",
+            "HOST": "dpg-abc123-a",
+            "PORT": "5432",
+            "OPTIONS": {"sslmode": "require"},
+        })
+
+    def test_database_url_sem_porta_nem_opcoes(self):
+        banco = banco_da_url("postgres://usuario:senha@host.exemplo/banco")
+
+        self.assertEqual(banco["PORT"], "5432")
+        self.assertEqual(banco["HOST"], "host.exemplo")
+        self.assertNotIn("OPTIONS", banco)
+
+    def test_database_url_que_nao_e_postgresql_e_recusada(self):
+        with self.assertRaisesMessage(ValueError, "PostgreSQL"):
+            banco_da_url("mysql://usuario:senha@host/banco")
+
+    def test_database_url_vale_mais_que_as_variaveis_db(self):
+        ambiente = {"DATABASE_URL": "postgresql://u:s@render-db/demo", "DB_ENGINE": "sqlite", "DB_HOST": "localhost"}
+
+        banco = banco_de_dados(Path("/projeto"), ambiente)
+
+        self.assertEqual((banco["HOST"], banco["NAME"]), ("render-db", "demo"))
+
+    def test_sem_database_url_continuam_valendo_o_sqlite_e_as_variaveis_db(self):
+        sqlite = banco_de_dados(Path("/projeto"), {"DB_ENGINE": "sqlite"})
+        postgres = banco_de_dados(Path("/projeto"), {"DB_NAME": "loja", "DB_HOST": "servidor", "DB_PORT": "6543"})
+
+        self.assertEqual(sqlite["ENGINE"], "django.db.backends.sqlite3")
+        self.assertEqual(sqlite["NAME"], Path("/projeto") / "db.sqlite3")
+        self.assertEqual(
+            (postgres["ENGINE"], postgres["NAME"], postgres["HOST"], postgres["PORT"]),
+            ("django.db.backends.postgresql", "loja", "servidor", "6543"),
+        )
+
+    def test_endereco_do_render_entra_em_hosts_e_origens(self):
+        hosts, origens = enderecos_publicos({
+            "DJANGO_ALLOWED_HOSTS": "localhost",
+            "RENDER_EXTERNAL_HOSTNAME": "esportivo-ufscar.onrender.com",
+            "RENDER_EXTERNAL_URL": "https://esportivo-ufscar.onrender.com",
+        })
+
+        self.assertEqual(hosts, ["localhost", "esportivo-ufscar.onrender.com"])
+        self.assertEqual(origens, ["https://esportivo-ufscar.onrender.com"])
+
+    def test_origem_vem_do_host_quando_falta_a_url_e_nada_se_repete(self):
+        hosts, origens = enderecos_publicos({
+            "DJANGO_ALLOWED_HOSTS": "app.onrender.com",
+            "DJANGO_CSRF_TRUSTED_ORIGINS": "https://app.onrender.com",
+            "RENDER_EXTERNAL_HOSTNAME": "app.onrender.com",
+        })
+
+        self.assertEqual(hosts, ["app.onrender.com"])
+        self.assertEqual(origens, ["https://app.onrender.com"])
+
+    def test_fora_do_render_valem_so_as_variaveis_do_env(self):
+        self.assertEqual(enderecos_publicos({}), (["localhost", "127.0.0.1"], []))
+
+    def test_env_bool_e_env_list(self):
+        self.assertTrue(env_bool("X", ambiente={"X": "Sim"}))
+        self.assertTrue(env_bool("RENDER", ambiente={"RENDER": "true"}))
+        self.assertFalse(env_bool("X", ambiente={}))
+        self.assertEqual(env_list("X", ambiente={"X": " a, ,b "}), ["a", "b"])
+
+    def test_whitenoise_serve_os_arquivos_estaticos(self):
+        self.assertEqual(settings.MIDDLEWARE[1], "whitenoise.middleware.WhiteNoiseMiddleware")
+        self.assertEqual(settings.MIDDLEWARE[0], "django.middleware.security.SecurityMiddleware")
+        self.assertEqual(
+            settings.STORAGES["staticfiles"]["BACKEND"], "whitenoise.storage.CompressedStaticFilesStorage"
+        )
+
+
+class ArquivosDeDeployTests(SimpleTestCase):
+    """render.yaml e build.sh: o que o deploy do Render precisa encontrar no repositório."""
+
+    def ler(self, nome):
+        return (settings.BASE_DIR / nome).read_text(encoding="utf-8")
+
+    def test_build_roda_as_etapas_na_ordem(self):
+        build = self.ler("build.sh")
+        etapas = [
+            "pip install -r requirements.txt",
+            "collectstatic --no-input",
+            "migrate --no-input",
+            "criar_perfis",
+            "popular_demonstracao --se-vazio",
+        ]
+
+        posicoes = [build.index(etapa) for etapa in etapas]
+        self.assertEqual(posicoes, sorted(posicoes))
+        self.assertIn("set -o errexit", build)
+        self.assertNotIn("\r", (settings.BASE_DIR / "build.sh").read_bytes().decode("utf-8"))
+
+    def test_blueprint_usa_os_planos_gratuitos_sem_segredos_no_arquivo(self):
+        blueprint = self.ler("render.yaml")
+
+        self.assertEqual(blueprint.count("plan: free"), 2)
+        self.assertIn("property: connectionString", blueprint)
+        self.assertIn("startCommand: gunicorn config.wsgi:application", blueprint)
+        self.assertIn("buildCommand: bash build.sh", blueprint)
+        self.assertRegex(blueprint, r"key: DJANGO_SECRET_KEY\s+generateValue: true")
+        self.assertRegex(blueprint, r"key: DEMO_SENHA\s+sync: false")
+        self.assertNotRegex(blueprint, r"key: DEMO_SENHA\s+value:")
+
+    def test_dependencias_de_producao(self):
+        requisitos = self.ler("requirements.txt")
+
+        self.assertIn("gunicorn", requisitos)
+        self.assertIn("whitenoise", requisitos)
