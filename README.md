@@ -98,7 +98,38 @@ para cada produto, a soma dos movimentos é igual ao saldo.
 
 O comando não grava nada e explica o motivo quando o banco já tem vendas, quando algum e-mail
 da demonstração já está em uso ou quando há produto com saldo sem movimento de estoque que o
-explique (por exemplo, depois de um `loaddata dados_exemplo`).
+explique (por exemplo, depois de um `loaddata dados_exemplo`). Com `--se-vazio`, um banco que
+já tem vendas é deixado como está, sem erro: é assim que o deploy roda o comando.
+
+### Publicar no Render (pacote 3.3)
+
+O arquivo `render.yaml` descreve o site e o banco PostgreSQL nos planos gratuitos do Render. A
+cada deploy, o `build.sh` instala as dependências, roda o `collectstatic` e o `migrate`, reaplica
+os perfis e carrega os dados de demonstração (só no primeiro deploy).
+
+1. Entre em https://render.com com a conta do GitHub que enxerga o repositório.
+2. Abra https://dashboard.render.com/blueprints e clique em **New Blueprint Instance**.
+3. Escolha o repositório `sistema-gestao-esportivo` e clique em **Connect**.
+4. Dê um nome ao Blueprint e, no campo `DEMO_SENHA`, digite a senha dos usuários de
+   demonstração (mínimo de 8 caracteres, não pode ser comum nem só números). Guarde essa senha
+   fora do repositório. Clique em **Apply**.
+5. Espere o banco e o site ficarem prontos (alguns minutos). O endereço aparece no topo da
+   página do serviço `esportivo-ufscar`, no formato `https://<nome>.onrender.com`.
+6. Entre com `admin@esportivo.demo` e a senha do passo 4. Os outros acessos são
+   `vendedor@esportivo.demo`, `estoquista@esportivo.demo` e `marina@esportivo.demo`.
+
+A partir daí, todo merge na `main` publica a versão nova sozinho. A `DJANGO_SECRET_KEY` é
+gerada pelo próprio Render, e a conexão com o banco chega ao site pela `DATABASE_URL`.
+
+Limites do plano gratuito:
+
+- o site **dorme depois de 15 minutos** sem acesso e leva **cerca de 1 minuto** para acordar:
+  abra-o um pouco antes de apresentar;
+- o banco gratuito **expira 30 dias depois de criado** e é apagado depois de mais 14 dias;
+- o disco do site é temporário: **imagens de produtos enviadas pelo Admin somem** quando o site
+  reinicia ou dorme. Os produtos de demonstração usam o espaço reservado "Foto do produto".
+
+Se o deploy falhar, a aba **Logs** do serviço mostra a etapa do `build.sh` que deu erro.
 
 ### Relatórios (pacote 4.7)
 

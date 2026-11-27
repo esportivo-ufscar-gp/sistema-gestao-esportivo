@@ -1,0 +1,35 @@
+# Blueprint do Render (pacote 3.3, ambiente de demonstração).
+#
+# Cria o site e o banco PostgreSQL de uma vez, nos planos gratuitos. O passo a passo está no
+# README, na seção "Publicar no Render". Atenção aos limites do plano gratuito:
+# - o site dorme depois de 15 minutos sem acesso e leva cerca de 1 minuto para acordar;
+# - o banco gratuito expira 30 dias depois de criado;
+# - o disco do site é temporário: imagens enviadas pelo Admin somem quando ele reinicia.
+
+databases:
+  - name: esportivo-db
+    plan: free
+    region: virginia          # a região mais próxima do Brasil entre as oferecidas
+    databaseName: esportivo
+    user: esportivo
+    postgresMajorVersion: "16"   # a versão do projeto (CLAUDE.md)
+
+services:
+  - type: web
+    name: esportivo-ufscar     # vira o endereço: https://esportivo-ufscar.onrender.com, se estiver livre
+    runtime: python
+    plan: free
+    region: virginia           # a mesma do banco, para os dois conversarem pela rede interna
+    buildCommand: bash build.sh
+    startCommand: gunicorn config.wsgi:application
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: esportivo-db
+          property: connectionString
+      - key: DJANGO_SECRET_KEY
+        generateValue: true    # o Render gera uma chave aleatória; ninguém precisa digitá-la
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DEMO_SENHA
+        sync: false            # o painel pede o valor na criação; nunca fica no repositório

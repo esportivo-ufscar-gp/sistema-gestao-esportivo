@@ -8,6 +8,9 @@ contas da demonstração.
 A senha dos usuários vem de --senha ou da variável de ambiente DEMO_SENHA. Sem nenhuma das
 duas, o comando gera uma senha aleatória e a mostra uma única vez, no fim da saída. Não existe
 senha padrão: o repositório é público.
+
+Com --se-vazio, um banco que já tem vendas é deixado como está, sem erro. É assim que o build
+do Render (build.sh) roda o comando a cada deploy: carrega os dados só no primeiro.
 """
 import os
 import secrets
@@ -15,6 +18,7 @@ import secrets
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.demonstracao import CLIENTES, EQUIPE, ErroDeDemonstracao, popular
+from apps.vendas.models import Venda
 
 VARIAVEL_DA_SENHA = "DEMO_SENHA"
 
@@ -31,8 +35,17 @@ class Command(BaseCommand):
                 "aleatória é gerada e mostrada uma única vez."
             ),
         )
+        parser.add_argument(
+            "--se-vazio",
+            action="store_true",
+            help="Se o banco já tiver vendas, não faz nada e termina sem erro (usado no deploy).",
+        )
 
     def handle(self, *args, **opcoes):
+        if opcoes["se_vazio"] and Venda.objects.exists():
+            self.stdout.write("O banco já tem vendas: os dados de demonstração não foram carregados de novo.")
+            return
+
         senha, origem = self._senha(opcoes["senha"])
 
         try:
