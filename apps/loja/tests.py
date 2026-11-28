@@ -600,6 +600,15 @@ class BaseDoCheckout(BaseDaLoja):
 class CheckoutTests(BaseDoCheckout):
     """HU12: identificação, retirada na loja e pagamento simulado."""
 
+    def test_consentimento_tem_os_links_dos_termos_e_da_privacidade(self):
+        # Roteiro 5.1, CT-32: os Termos de Uso também se abrem pelo checkout, não só pelo cadastro.
+        self.adiciona(self.tenis)
+
+        pagina = self.client.get(reverse("loja:checkout"))
+
+        self.assertContains(pagina, f'href="{reverse("core:termos")}"')
+        self.assertContains(pagina, f'href="{reverse("core:privacidade")}"')
+
     def test_carrinho_vazio_volta_ao_carrinho(self):
         resposta = self.client.get(reverse("loja:checkout"), follow=True)
 
