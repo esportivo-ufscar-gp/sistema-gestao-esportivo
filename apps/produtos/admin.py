@@ -1,7 +1,7 @@
 """
 Registro dos modelos do módulo Produtos no Django Admin.
 
-Pacote 4.2: categorias (4.2.1) e produtos (4.2.2).
+Pacote 4.2: categorias (4.2.1) e produtos (4.2.2). Pacote 3.3: fotos extras, no inline do produto.
 
 Os cadastros internos ficam no Admin, com permissões por grupo. O saldo de estoque aparece
 aqui somente para leitura: quem altera o saldo é o serviço de estoque (pacote 4.3).
@@ -9,7 +9,7 @@ aqui somente para leitura: quem altera o saldo é o serviço de estoque (pacote 
 from django.contrib import admin
 from django.db.models import Count
 
-from .models import Categoria, Produto
+from .models import Categoria, FotoDoProduto, Produto
 
 
 @admin.register(Categoria)
@@ -27,8 +27,19 @@ class CategoriaAdmin(admin.ModelAdmin):
         return categoria._total_de_produtos
 
 
+class FotoDoProdutoInline(admin.TabularInline):
+    """Fotos extras (pacote 3.3): cadastradas, ordenadas e removidas na própria tela do produto."""
+
+    model = FotoDoProduto
+    fields = ("imagem", "ordem")
+    extra = 1
+    verbose_name = "foto extra"
+    verbose_name_plural = "fotos extras (aparecem no catálogo depois da foto principal)"
+
+
 @admin.register(Produto)
 class ProdutoAdmin(admin.ModelAdmin):
+    inlines = (FotoDoProdutoInline,)
     list_display = ("codigo", "nome", "categoria", "preco", "estoque_atual", "ativo")
     list_filter = ("categoria", "ativo")
     search_fields = ("nome", "codigo")
