@@ -1,6 +1,21 @@
+from django.conf import settings
 from django.db import DatabaseError, connection
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import redirect, render
+from django.views.static import serve
+
+
+def media(request, caminho):
+    """
+    Serve as fotos dos produtos (pasta media/).
+
+    Em desenvolvimento (DEBUG) e no ambiente de demonstração (SERVIR_MEDIA, ligado sozinho no
+    Render). Fora disso responde 404, como o Django faz por padrão. O serve do Django recusa
+    caminhos que saiam da pasta media/.
+    """
+    if not (settings.DEBUG or settings.SERVIR_MEDIA):
+        raise Http404
+    return serve(request, caminho, document_root=settings.MEDIA_ROOT)
 
 
 def home(request):

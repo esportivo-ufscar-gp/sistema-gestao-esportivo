@@ -101,11 +101,23 @@ da demonstração já está em uso ou quando há produto com saldo sem movimento
 explique (por exemplo, depois de um `loaddata dados_exemplo`). Com `--se-vazio`, um banco que
 já tem vendas é deixado como está, sem erro: é assim que o deploy roda o comando.
 
+As fotos do catálogo de exemplo ficam em `apps/core/imagens_demonstracao/`, uma por produto, com o
+código no nome do arquivo (a origem e a licença de cada uma estão no `CREDITOS.md` da pasta). Para
+ligá-las aos produtos:
+
+```bash
+python manage.py carregar_imagens_demonstracao
+```
+
+O comando grava cada foto em `media/produtos/<código>.jpg` e pode rodar quantas vezes for preciso.
+Uma foto trocada pelo Admin é mantida enquanto o arquivo dela existir.
+
 ### Publicar no Render (pacote 3.3)
 
 O arquivo `render.yaml` descreve o site e o banco PostgreSQL nos planos gratuitos do Render. A
 cada deploy, o `build.sh` instala as dependências, roda o `collectstatic` e o `migrate`, reaplica
-os perfis e carrega os dados de demonstração (só no primeiro deploy).
+os perfis, carrega os dados de demonstração (só no primeiro deploy) e grava de novo as fotos do
+catálogo, porque o disco do site é recriado.
 
 1. Entre em https://render.com com a conta do GitHub que enxerga o repositório.
 2. Abra https://dashboard.render.com/blueprints e clique em **New Blueprint Instance**.
@@ -127,7 +139,10 @@ Limites do plano gratuito:
   abra-o um pouco antes de apresentar;
 - o banco gratuito **expira 30 dias depois de criado** e é apagado depois de mais 14 dias;
 - o disco do site é temporário: **imagens de produtos enviadas pelo Admin somem** quando o site
-  reinicia ou dorme. Os produtos de demonstração usam o espaço reservado "Foto do produto".
+  reinicia ou dorme. As fotos do catálogo de exemplo não somem, porque o build as grava a cada
+  deploy; um produto cuja foto enviada pelo Admin sumiu volta a mostrar a foto de exemplo (ou o
+  espaço reservado "Foto do produto", se não houver uma). Para trocar uma foto de vez, substitua
+  o arquivo na pasta `apps/core/imagens_demonstracao/` e faça o merge na `main`.
 
 Se o deploy falhar, a aba **Logs** do serviço mostra a etapa do `build.sh` que deu erro.
 

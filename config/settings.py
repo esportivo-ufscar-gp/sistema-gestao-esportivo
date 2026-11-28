@@ -152,6 +152,10 @@ warnings.filterwarnings("ignore", message=r"No directory at: .*staticfiles")
 MEDIA_URL = "media/"          # imagens de produtos (pacote 4.2.2)
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Com DEBUG=False o Django não serve a media/. No ambiente de demonstração (Render) as fotos
+# do catálogo são poucas e pequenas, então o próprio Django as serve (veja core.views.media).
+SERVIR_MEDIA = env_bool("DJANGO_SERVIR_MEDIA", env_bool("RENDER"))
+
 # ------------------------------------------------------------------ Loja online
 # Mostrados no checkout e na confirmação do pedido (pacote 4.5.3): a única entrega é a
 # retirada na loja. Troque os textos provisórios pelos dados reais da loja.
