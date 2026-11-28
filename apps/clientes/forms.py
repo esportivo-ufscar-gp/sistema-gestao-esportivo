@@ -2,34 +2,40 @@ from django import forms
 from django.utils.safestring import mark_safe
 
 from .models import Cliente
+from .services import EMAIL_EM_USO, email_em_uso
 
 
 class FormularioDeCadastroCliente(forms.ModelForm):
     """Formulário de cadastro de clientes com consentimento LGPD."""
 
     nome = forms.CharField(
+        label="Nome",
         max_length=150,
         widget=forms.TextInput(
             attrs={"class": "form-control", "placeholder": "Seu nome completo"}
         ),
     )
     email = forms.EmailField(
+        label="E-mail",
         widget=forms.EmailInput(
             attrs={"class": "form-control", "placeholder": "voce@exemplo.com"}
         ),
     )
     telefone = forms.CharField(
+        label="Telefone",
         max_length=20,
         widget=forms.TextInput(
             attrs={"class": "form-control", "placeholder": "(16) 99999-9999"}
         ),
     )
     senha = forms.CharField(
+        label="Senha",
         widget=forms.PasswordInput(
             attrs={"class": "form-control", "placeholder": "Mínimo de 8 caracteres"}
         ),
     )
     confirmacao_senha = forms.CharField(
+        label="Confirmação da senha",
         widget=forms.PasswordInput(
             attrs={"class": "form-control", "placeholder": "Repita a senha"}
         ),
@@ -61,6 +67,15 @@ class FormularioDeCadastroCliente(forms.ModelForm):
     class Meta:
         model = Cliente
         fields = ["nome", "email", "telefone"]
+
+    def clean_email(self):
+        # Conferido aqui, e não só no serviço: sem isso, o e-mail de um cliente já cadastrado
+        # caía na restrição do banco, e a tela mostrava a mensagem técnica dela
+        # ('Restrição "cliente_email_unico_ci" foi violada.') no topo do formulário.
+        email = self.cleaned_data["email"]
+        if email_em_uso(email):
+            raise forms.ValidationError(EMAIL_EM_USO)
+        return email
 
     def clean(self):
         cleaned_data = super().clean()
