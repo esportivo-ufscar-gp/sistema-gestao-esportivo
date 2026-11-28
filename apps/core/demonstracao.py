@@ -25,6 +25,7 @@ from django.contrib.auth import get_user_model, password_validation
 from django.contrib.auth.models import Group
 from django.core import serializers
 from django.core.exceptions import ValidationError
+from django.core.files import File
 from django.core.management.color import no_style
 from django.db import connection, transaction
 from django.db.models import F, Q, Sum
@@ -283,3 +284,55 @@ def _itens(sorteio, vendaveis):
 def _saldo(produto):
     produto.refresh_from_db(fields=["estoque_atual"])
     return produto.estoque_atual
+
+
+# ------------------------------------------------------------------ Fotos do catálogo
+# As fotos do catálogo de exemplo ficam versionadas nesta pasta, uma por produto, com o código
+# no nome (100110.jpg). A pasta media/ não vai para o repositório (CLAUDE.md), e no Render o
+# disco do site é recriado a cada deploy e a cada vez que ele acorda: por isso o build roda
+# carregar_imagens a cada deploy, gravando de novo os arquivos na media/.
+PASTA_DAS_IMAGENS = Path(__file__).resolve().parent / "imagens_demonstracao"
+
+
+@dataclass
+class ResultadoDasImagens:
+    ligadas: list = field(default_factory=list)       # códigos que receberam a foto da pasta
+    mantidas: list = field(default_factory=list)      # já tinham outra foto, que ainda existe
+    sem_produto: list = field(default_factory=list)   # fotos cujo código não está no catálogo
+
+
+def carregar_imagens(pasta=PASTA_DAS_IMAGENS):
+    """
+    Grava cada foto da pasta em produtos/<código>.jpg e a liga ao produto do mesmo código.
+
+    Pode rodar quantas vezes for preciso: o arquivo é sobrescrito com o mesmo nome, sem criar
+    cópias. Uma foto que alguém trocou pelo Admin é mantida enquanto o arquivo dela existir;
+    se o arquivo sumiu (o disco do Render foi recriado), o produto volta a usar a foto da pasta,
+    em vez de mostrar uma imagem quebrada. Só o campo imagem é gravado: o saldo de estoque não
+    é tocado (ele só muda pelo serviço de estoque).
+    """
+    resultado = ResultadoDasImagens()
+    campo = Produto._meta.get_field("imagem")
+    arquivos = {arquivo.stem: arquivo for arquivo in sorted(Path(pasta).glob("*.jpg"))}
+    produtos = {produto.codigo: produto for produto in Produto.objects.filter(codigo__in=arquivos)}
+
+    for codigo, arquivo in arquivos.items():
+        produto = produtos.get(codigo)
+        if produto is None:
+            resultado.sem_produto.append(codigo)
+            continue
+
+        nome = f"{campo.upload_to}{codigo}.jpg"
+        atual = produto.imagem.name
+        if atual and atual != nome and campo.storage.exists(atual):
+            resultado.mantidas.append(codigo)
+            continue
+
+        if campo.storage.exists(nome):
+            campo.storage.delete(nome)
+        with arquivo.open("rb") as conteudo:
+            salvo = campo.storage.save(nome, File(conteudo, name=arquivo.name))
+        Produto.objects.filter(pk=produto.pk).update(imagem=salvo)
+        resultado.ligadas.append(codigo)
+
+    return resultado

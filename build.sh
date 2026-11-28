@@ -16,3 +16,6 @@ python manage.py criar_perfis
 # Só carrega os dados no primeiro deploy; depois, o banco já tem vendas e o comando não faz nada.
 # A senha vem de DEMO_SENHA, preenchida no painel do Render.
 python manage.py popular_demonstracao --se-vazio
+
+# A cada deploy: o disco do site é recriado, então as fotos do catálogo são gravadas de novo.
+python manage.py carregar_imagens_demonstracao

@@ -3,7 +3,9 @@ import json
 import os
 import re
 import secrets
+import tempfile
 from datetime import timedelta
+from decimal import Decimal
 from io import StringIO
 from pathlib import Path
 from unittest import mock
@@ -13,18 +15,25 @@ from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.core.management import CommandError, call_command
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from apps.clientes.models import Cliente
 from config.ambiente import banco_da_url, banco_de_dados, enderecos_publicos, env_bool, env_list
 from apps.estoque.models import MovimentoEstoque, TipoDeMovimento
 from apps.estoque.services import produtos_em_alerta
-from apps.produtos.models import Produto
+from apps.produtos.models import Categoria, Produto
 from apps.vendas.models import CanalDeVenda, StatusDeVenda, Venda
 
-from .demonstracao import ErroDeDemonstracao, popular, saldo_pelos_movimentos
+from .demonstracao import (
+    PASTA_DAS_IMAGENS,
+    ErroDeDemonstracao,
+    carregar_imagens,
+    popular,
+    saldo_pelos_movimentos,
+)
 
 
 class HealthCheckTests(TestCase):
@@ -414,6 +423,7 @@ class ArquivosDeDeployTests(SimpleTestCase):
             "migrate --no-input",
             "criar_perfis",
             "popular_demonstracao --se-vazio",
+            "carregar_imagens_demonstracao",
         ]
 
         posicoes = [build.index(etapa) for etapa in etapas]
@@ -437,3 +447,210 @@ class ArquivosDeDeployTests(SimpleTestCase):
 
         self.assertIn("gunicorn", requisitos)
         self.assertIn("whitenoise", requisitos)
+
+
+def _jpeg(caminho, cor="red"):
+    Image.new("RGB", (16, 10), cor).save(caminho, "JPEG")
+
+
+def _usa_media_temporaria(teste):
+    """Troca a MEDIA_ROOT por uma pasta temporária, apagada no fim do teste."""
+    pasta = tempfile.TemporaryDirectory()
+    teste.addCleanup(pasta.cleanup)
+    configuracao = override_settings(MEDIA_ROOT=pasta.name)
+    configuracao.enable()
+    teste.addCleanup(configuracao.disable)
+    return Path(pasta.name)
+
+
+COMANDO_DAS_IMAGENS = "apps.core.management.commands.carregar_imagens_demonstracao.carregar_imagens"
+
+
+class ImagensDaDemonstracaoTests(TestCase):
+    """Pacote 3.3: as fotos versionadas são ligadas aos produtos pelo código, a cada deploy."""
+
+    def setUp(self):
+        self.media = _usa_media_temporaria(self)
+
+        origem = tempfile.TemporaryDirectory()
+        self.addCleanup(origem.cleanup)
+        self.pasta = Path(origem.name)
+        _jpeg(self.pasta / "100110.jpg", "red")
+        _jpeg(self.pasta / "100231.jpg", "blue")
+        _jpeg(self.pasta / "999999.jpg", "green")
+
+        categoria = Categoria.objects.create(nome="Corrida")
+        self.tenis = Produto.objects.create(
+            codigo="100110", nome="Tênis", preco=Decimal("10.00"), categoria=categoria
+        )
+        self.camisa = Produto.objects.create(
+            codigo="100231", nome="Camisa", preco=Decimal("5.00"), categoria=categoria
+        )
+
+    def arquivos_gravados(self):
+        return sorted(p.name for p in (self.media / "produtos").iterdir())
+
+    def troca_a_foto_do_tenis_pelo_admin(self):
+        (self.media / "produtos").mkdir()
+        _jpeg(self.media / "produtos" / "minha_foto.jpg")
+        Produto.objects.filter(pk=self.tenis.pk).update(imagem="produtos/minha_foto.jpg")
+
+    def roda_o_comando(self):
+        saida = StringIO()
+        with mock.patch(COMANDO_DAS_IMAGENS, side_effect=lambda: carregar_imagens(self.pasta)):
+            call_command("carregar_imagens_demonstracao", stdout=saida)
+        return saida.getvalue()
+
+    def test_liga_cada_foto_ao_produto_do_mesmo_codigo(self):
+        resultado = carregar_imagens(self.pasta)
+
+        self.tenis.refresh_from_db()
+        self.camisa.refresh_from_db()
+        self.assertEqual(self.tenis.imagem.name, "produtos/100110.jpg")
+        self.assertEqual(self.camisa.imagem.name, "produtos/100231.jpg")
+        self.assertEqual(
+            (self.media / "produtos" / "100110.jpg").read_bytes(),
+            (self.pasta / "100110.jpg").read_bytes(),
+        )
+        self.assertEqual(resultado.ligadas, ["100110", "100231"])
+
+    def test_foto_sem_produto_e_ignorada(self):
+        resultado = carregar_imagens(self.pasta)
+
+        self.assertEqual(resultado.sem_produto, ["999999"])
+        self.assertNotIn("999999.jpg", self.arquivos_gravados())
+
+    def test_rodar_de_novo_nao_cria_copias(self):
+        carregar_imagens(self.pasta)
+        carregar_imagens(self.pasta)
+
+        self.tenis.refresh_from_db()
+        self.assertEqual(self.tenis.imagem.name, "produtos/100110.jpg")
+        self.assertEqual(self.arquivos_gravados(), ["100110.jpg", "100231.jpg"])
+
+    def test_disco_recriado_recebe_os_arquivos_de_novo(self):
+        carregar_imagens(self.pasta)
+        (self.media / "produtos" / "100110.jpg").unlink()
+
+        carregar_imagens(self.pasta)
+
+        self.assertIn("100110.jpg", self.arquivos_gravados())
+
+    def test_mantem_foto_trocada_pelo_admin_enquanto_o_arquivo_existe(self):
+        self.troca_a_foto_do_tenis_pelo_admin()
+
+        resultado = carregar_imagens(self.pasta)
+
+        self.tenis.refresh_from_db()
+        self.assertEqual(self.tenis.imagem.name, "produtos/minha_foto.jpg")
+        self.assertEqual(resultado.mantidas, ["100110"])
+
+    def test_foto_do_admin_cujo_arquivo_sumiu_volta_para_a_da_pasta(self):
+        Produto.objects.filter(pk=self.tenis.pk).update(imagem="produtos/sumiu.jpg")
+
+        carregar_imagens(self.pasta)
+
+        self.tenis.refresh_from_db()
+        self.assertEqual(self.tenis.imagem.name, "produtos/100110.jpg")
+
+    def test_nao_mexe_no_estoque(self):
+        movimentos = MovimentoEstoque.objects.count()
+
+        carregar_imagens(self.pasta)
+
+        self.tenis.refresh_from_db()
+        self.assertEqual(self.tenis.estoque_atual, 0)
+        self.assertEqual(MovimentoEstoque.objects.count(), movimentos)
+
+    def test_comando_mostra_o_resumo(self):
+        saida = self.roda_o_comando()
+
+        self.assertIn("Fotos ligadas aos produtos: 2.", saida)
+        self.assertIn("Fotos sem produto com o mesmo código: 999999.", saida)
+
+    def test_comando_avisa_as_fotos_mantidas(self):
+        self.troca_a_foto_do_tenis_pelo_admin()
+
+        saida = self.roda_o_comando()
+
+        self.assertIn("Mantidas as fotos trocadas pelo Admin: 100110.", saida)
+
+    def test_catalogo_mostra_a_foto(self):
+        carregar_imagens(self.pasta)
+
+        resposta = self.client.get(reverse("loja:catalogo"))
+
+        self.assertContains(resposta, 'src="/media/produtos/100110.jpg"')
+
+
+class PastaDeImagensTests(SimpleTestCase):
+    """As fotos versionadas: uma por produto do catálogo de exemplo, leves e com a origem anotada."""
+
+    def codigos_da_fixture(self):
+        caminho = Path(apps.get_app_config("produtos").path) / "fixtures" / "dados_exemplo.json"
+        registros = json.loads(caminho.read_text(encoding="utf-8"))
+        return sorted(r["fields"]["codigo"] for r in registros if r["model"] == "produtos.produto")
+
+    def test_uma_foto_por_produto_do_catalogo(self):
+        fotos = sorted(p.stem for p in PASTA_DAS_IMAGENS.glob("*.jpg"))
+
+        self.assertEqual(fotos, self.codigos_da_fixture())
+
+    def test_fotos_sao_jpeg_leves_na_proporcao_dos_cartoes(self):
+        for foto in PASTA_DAS_IMAGENS.glob("*.jpg"):
+            with self.subTest(foto=foto.name), Image.open(foto) as imagem:
+                self.assertEqual(imagem.format, "JPEG")
+                self.assertEqual(imagem.size, (800, 500))
+                self.assertLess(foto.stat().st_size, 200 * 1024)
+
+    def test_creditos_registram_a_origem_de_cada_foto(self):
+        creditos = (PASTA_DAS_IMAGENS / "CREDITOS.md").read_text(encoding="utf-8")
+
+        for codigo in self.codigos_da_fixture():
+            with self.subTest(codigo=codigo):
+                self.assertRegex(creditos, rf"{codigo}\.jpg \|.*\| https://www\.pexels\.com/photo/\d+/")
+
+
+class MediaTests(TestCase):
+    """As fotos dos produtos só são servidas em desenvolvimento ou no ambiente de demonstração."""
+
+    def setUp(self):
+        media = _usa_media_temporaria(self)
+        (media / "produtos").mkdir()
+        _jpeg(media / "produtos" / "100110.jpg")
+
+    def baixa(self, url):
+        # A resposta deixa o arquivo aberto; no Windows, a pasta temporária só é apagada depois.
+        resposta = self.client.get(url)
+        self.addCleanup(resposta.close)
+        return resposta
+
+    @override_settings(DEBUG=False, SERVIR_MEDIA=True)
+    def test_ambiente_de_demonstracao_serve_as_fotos(self):
+        resposta = self.baixa("/media/produtos/100110.jpg")
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta["Content-Type"], "image/jpeg")
+
+    @override_settings(DEBUG=True, SERVIR_MEDIA=False)
+    def test_desenvolvimento_serve_as_fotos(self):
+        self.assertEqual(self.baixa("/media/produtos/100110.jpg").status_code, 200)
+
+    @override_settings(DEBUG=False, SERVIR_MEDIA=False)
+    def test_sem_debug_nem_servir_media_responde_404(self):
+        self.assertEqual(self.client.get("/media/produtos/100110.jpg").status_code, 404)
+
+    @override_settings(DEBUG=False, SERVIR_MEDIA=True)
+    def test_arquivo_inexistente_responde_404(self):
+        self.assertEqual(self.client.get("/media/produtos/nao_existe.jpg").status_code, 404)
+
+    @override_settings(DEBUG=False, SERVIR_MEDIA=True)
+    def test_nao_sai_da_pasta_media(self):
+        resposta = self.client.get("/media/..%2F..%2Fmanage.py")
+
+        self.assertIn(resposta.status_code, (400, 404))
+
+    def test_servir_media_liga_sozinho_no_render(self):
+        configuracao = (settings.BASE_DIR / "config" / "settings.py").read_text(encoding="utf-8")
+
+        self.assertIn('SERVIR_MEDIA = env_bool("DJANGO_SERVIR_MEDIA", env_bool("RENDER"))', configuracao)
