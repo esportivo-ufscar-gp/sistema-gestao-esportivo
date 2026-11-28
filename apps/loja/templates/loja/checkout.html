@@ -80,7 +80,8 @@
             <div class="form-check">
               {{ formulario.consentimento }}
               <label class="form-check-label small" for="{{ formulario.consentimento.id_for_label }}">
-                {{ formulario.consentimento.label }}, conforme a
+                {{ formulario.consentimento.label }}, conforme os
+                <a href="{% url 'core:termos' %}" target="_blank" rel="noopener">Termos de Uso</a>, a
                 <a href="{% url 'core:privacidade' %}" target="_blank" rel="noopener">Política de Privacidade</a>
                 da Esportivo UFSCar e a LGPD. <span class="text-danger">(obrigatório)</span>
               </label>

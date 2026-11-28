@@ -113,7 +113,8 @@ def _finaliza(request, carrinho):
     carrinho.limpar()
     messages.success(
         request,
-        f"Venda {venda.numero_formatado} finalizada no total de R$ {number_format(venda.total, 2)}.",
+        f"Venda {venda.numero_formatado} finalizada no total de "
+        f"R$ {number_format(venda.total, 2, force_grouping=True)}.",
     )
 
 

@@ -213,6 +213,29 @@ class ViewCadastroClienteTests(TestCase):
         self.assertEqual(resposta.context["form"].errors["email"], ["Já existe uma conta cadastrada com este e-mail."])
         self.assertFalse(Cliente.objects.exists())
 
+    def test_rotulos_dos_campos_em_portugues_com_acentos(self):
+        # Roteiro 5.1, CT-30: a tela mostrava "Email" e "Confirmacao senha" (nomes dos campos).
+        resposta = self.client.get(reverse("clientes:cadastro"))
+
+        rotulos = [campo.label for campo in resposta.context["form"]][:5]
+        self.assertEqual(rotulos, ["Nome", "E-mail", "Telefone", "Senha", "Confirmação da senha"])
+        self.assertNotContains(resposta, "Confirmacao")
+
+    def test_email_de_cliente_ja_cadastrado_mostra_erro_no_campo_sem_mensagem_tecnica(self):
+        # Roteiro 5.1, CT-21: o e-mail de um cliente já cadastrado caía na restrição do banco, e a
+        # tela mostrava 'Restrição "cliente_email_unico_ci" foi violada.' no topo do formulário.
+        Cliente.objects.create(
+            nome="Marina Souza", email="marina@exemplo.com", telefone="", consentimento_em=timezone.now()
+        )
+
+        resposta = self.client.post(reverse("clientes:cadastro"), self.dados(email="MARINA@exemplo.com"))
+
+        self.assertEqual(resposta.status_code, 200)
+        self.assertEqual(resposta.context["form"].errors["email"], ["Já existe uma conta cadastrada com este e-mail."])
+        self.assertEqual(resposta.context["form"].non_field_errors(), [])
+        self.assertNotContains(resposta, "cliente_email_unico_ci")
+        self.assertEqual(Cliente.objects.count(), 1)
+
     def test_usuario_logado_ao_acessar_cadastro_e_redirecionado(self):
         usuario = User.objects.create_user("cliente", "cliente@exemplo.com", "senha")
         self.client.force_login(usuario)

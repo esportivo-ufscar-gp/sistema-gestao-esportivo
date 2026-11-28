@@ -58,7 +58,7 @@
                     {{ produto.estoque_atual }}
                   {% endif %}
                 </td>
-                <td class="text-end">R$ {{ produto.preco|floatformat:2 }}</td>
+                <td class="text-end">R$ {{ produto.preco|floatformat:"2g" }}</td>
                 <td class="text-end">
                   <form method="post">
                     {% csrf_token %}
@@ -90,7 +90,7 @@
               <tr>
                 <td>
                   {{ linha.produto.nome }}
-                  <div class="small text-body-secondary">R$ {{ linha.produto.preco|floatformat:2 }} cada</div>
+                  <div class="small text-body-secondary">R$ {{ linha.produto.preco|floatformat:"2g" }} cada</div>
                 </td>
                 <td>
                   <div class="d-flex gap-1 align-items-center">
@@ -114,7 +114,7 @@
                     </form>
                   </div>
                 </td>
-                <td class="text-end">R$ {{ linha.subtotal|floatformat:2 }}</td>
+                <td class="text-end">R$ {{ linha.subtotal|floatformat:"2g" }}</td>
                 <td class="text-end">
                   <form method="post">
                     {% csrf_token %}
@@ -136,7 +136,7 @@
       <div class="card-body border-top">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <span class="fw-semibold">Total</span>
-          <span class="fs-4 fw-semibold">R$ {{ total|floatformat:2 }}</span>
+          <span class="fs-4 fw-semibold">R$ {{ total|floatformat:"2g" }}</span>
         </div>
 
         <form method="post">
@@ -191,9 +191,9 @@
         {% for venda in ultimas_vendas %}
           <tr>
             <td class="fw-semibold">{{ venda.numero_formatado }}</td>
-            <td>{{ venda.criado_em|date:"d/m" }} às {{ venda.criado_em|time:"H:i" }}</td>
+            <td>{{ venda.criado_em|date:"d/m/Y" }} às {{ venda.criado_em|time:"H:i" }}</td>
             <td>{{ venda.get_forma_pagamento_display }}</td>
-            <td class="text-end">R$ {{ venda.total|floatformat:2 }}</td>
+            <td class="text-end">R$ {{ venda.total|floatformat:"2g" }}</td>
             <td>
               {% if venda.cancelada %}
                 <span class="badge text-bg-secondary">Cancelada</span>

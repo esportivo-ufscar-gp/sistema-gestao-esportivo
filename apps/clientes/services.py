@@ -49,6 +49,22 @@ class EmailDeUmaConta(ErroDeIdentificacao):
     """O e-mail informado pertence a uma conta: só quem entrar nela faz o pedido."""
 
 
+EMAIL_EM_USO = "Já existe uma conta cadastrada com este e-mail."
+
+
+def email_em_uso(email):
+    """
+    O e-mail já pertence a uma conta (de cliente ou da equipe) ou a um cadastro de cliente.
+
+    A comparação não diferencia maiúsculas e minúsculas, como a restrição do banco.
+    """
+    email = email.strip()
+    return (
+        Usuario.objects.filter(Q(username__iexact=email) | Q(email__iexact=email)).exists()
+        or Cliente.objects.filter(email__iexact=email).exists()
+    )
+
+
 def cadastrar_cliente(nome, email, telefone, senha):
     """
     Cadastra um novo cliente com consentimento LGPD (HU14).
@@ -58,12 +74,8 @@ def cadastrar_cliente(nome, email, telefone, senha):
     """
     email_limpo = email.strip().lower()
 
-    if (
-        Usuario.objects.filter(username__iexact=email_limpo).exists()
-        or Usuario.objects.filter(email__iexact=email_limpo).exists()
-        or Cliente.objects.filter(email__iexact=email_limpo).exists()
-    ):
-        raise ValidationError({"email": "Já existe uma conta cadastrada com este e-mail."})
+    if email_em_uso(email_limpo):
+        raise ValidationError({"email": EMAIL_EM_USO})
 
     # Mesmas regras de senha do settings (mínimo de 8 caracteres, não comum, não só números e
     # diferente do nome e do e-mail). Sem isso, a tela aceitava qualquer senha, até "1".
