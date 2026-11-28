@@ -103,7 +103,7 @@ já tem vendas é deixado como está, sem erro: é assim que o deploy roda o com
 
 As fotos do catálogo de exemplo ficam em `apps/core/imagens_demonstracao/`, com o código no nome
 do arquivo: `<código>.jpg` é a foto principal e `<código>-2.jpg`, `<código>-3.jpg` são fotos
-extras da mesma peça, de outro ângulo. Todas seguem o mesmo padrão (produto recortado sobre o
+extras da mesma peça (outro ângulo ou um close de detalhe). Todas seguem o mesmo padrão (produto recortado sobre o
 mesmo fundo claro, 1200 x 1200); a origem, a licença e as alterações de cada uma estão no
 `CREDITOS.md` da pasta. Para ligá-las aos produtos:
 
