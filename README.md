@@ -201,7 +201,9 @@ de cobertura (pacote 5.2), gere também a versão em HTML com `coverage html` (p
   canais, o cancelamento, o histórico do cliente e os relatórios, com foco no estoque compartilhado.
 - [Documentação técnica](docs/Documentacao_Tecnica_6.1.docx) (pacote 6.1): descreve o sistema como foi
   construído, com tecnologias, arquitetura, modelo de dados, regras de negócio, perfis, configuração,
-  instalação, qualidade e publicação.
+  instalação, qualidade e a publicação no Render, com o deploy automático e os limites do plano gratuito.
+- [Encerramento e lições aprendidas](docs/Encerramento_e_Licoes_Aprendidas_1.4.docx) (pacote 1.4): rascunho
+  do relatório de encerramento, com resultados, riscos, mudanças e lições aprendidas do projeto.
 
 ## Fluxo de trabalho
 
