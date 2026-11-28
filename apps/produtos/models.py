@@ -1,7 +1,7 @@
 """
 Modelos do módulo Produtos.
 
-Pacote 4.2: categorias (4.2.1) e produtos (4.2.2).
+Pacote 4.2: categorias (4.2.1) e produtos (4.2.2). Pacote 3.3: fotos extras do produto.
 
 As regras de negócio que valem para qualquer caminho de escrita (Admin, fixtures, serviços)
 estão no próprio modelo: validadores para a validação em Python e restrições nomeadas para a
@@ -91,3 +91,31 @@ class Produto(models.Model):
 
     def __str__(self):
         return f"{self.codigo} - {self.nome}"
+
+
+class FotoDoProduto(models.Model):
+    """
+    Foto extra do produto (pacote 3.3). A foto principal continua em Produto.imagem; as extras
+    aparecem no cartão do catálogo depois dela, em ordem crescente, quando o mouse passa por cima.
+    """
+
+    produto = models.ForeignKey(
+        Produto,
+        on_delete=models.CASCADE,  # a foto não tem histórico próprio: sai junto com o produto
+        related_name="fotos",
+        verbose_name="produto",
+    )
+    imagem = models.ImageField("imagem", upload_to="produtos/")
+    ordem = models.PositiveIntegerField(
+        "ordem",
+        default=1,
+        help_text="Posição depois da foto principal: a de menor ordem aparece primeiro.",
+    )
+
+    class Meta:
+        verbose_name = "foto do produto"
+        verbose_name_plural = "fotos do produto"
+        ordering = ["ordem", "id"]
+
+    def __str__(self):
+        return f"Foto {self.ordem} de {self.produto}"

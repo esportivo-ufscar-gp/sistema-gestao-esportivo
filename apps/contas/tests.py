@@ -217,6 +217,7 @@ class PerfisTests(BaseDeContas):
             {
                 "add_categoria", "change_categoria", "delete_categoria", "view_categoria",
                 "add_produto", "change_produto", "delete_produto", "view_produto",
+                "add_fotodoproduto", "change_fotodoproduto", "delete_fotodoproduto", "view_fotodoproduto",
             },
         )
         self.assertEqual(
@@ -241,13 +242,19 @@ class PerfisTests(BaseDeContas):
         )
 
     def test_vendedor_visualiza_produtos_e_vendas(self):
-        self.assertEqual(self._codenames(PERFIL_VENDEDOR, "produtos"), {"view_categoria", "view_produto"})
+        self.assertEqual(
+            self._codenames(PERFIL_VENDEDOR, "produtos"),
+            {"view_categoria", "view_produto", "view_fotodoproduto"},
+        )
         self.assertEqual(self._codenames(PERFIL_VENDEDOR, "vendas"), {"view_venda", "view_itemvenda"})
         self.assertEqual(self._codenames(PERFIL_VENDEDOR, "estoque"), set())
         self.assertEqual(self._codenames(PERFIL_VENDEDOR, "clientes"), set())
 
     def test_estoquista_visualiza_produtos_e_registra_movimentos(self):
-        self.assertEqual(self._codenames(PERFIL_ESTOQUISTA, "produtos"), {"view_categoria", "view_produto"})
+        self.assertEqual(
+            self._codenames(PERFIL_ESTOQUISTA, "produtos"),
+            {"view_categoria", "view_produto", "view_fotodoproduto"},
+        )
         self.assertEqual(
             self._codenames(PERFIL_ESTOQUISTA, "estoque"),
             {"view_movimentoestoque", "add_movimentoestoque"},

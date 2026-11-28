@@ -92,7 +92,12 @@ def produtos_do_catalogo(categoria=None, busca="", ordem=ORDENACAO_PADRAO):
     `categoria` filtra pelo id; `busca` procura no nome sem diferenciar maiúsculas e
     minúsculas; `ordem` é uma das chaves de ORDENACOES (valor desconhecido vira o padrão).
     """
-    produtos = Produto.objects.filter(ativo=True, categoria__ativa=True).select_related("categoria")
+    # As fotos extras (pacote 3.3) vêm numa consulta só, já na ordem do modelo FotoDoProduto.
+    produtos = (
+        Produto.objects.filter(ativo=True, categoria__ativa=True)
+        .select_related("categoria")
+        .prefetch_related("fotos")
+    )
 
     if categoria is not None:
         produtos = produtos.filter(categoria_id=categoria)

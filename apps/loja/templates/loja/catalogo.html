@@ -1,5 +1,5 @@
 {% extends "loja/base_loja.html" %}
-{% load loja %}
+{% load loja static %}
 
 {% block titulo %}{% if categoria %}{{ categoria.nome }}{% else %}Catálogo{% endif %} | Esportivo UFSCar{% endblock %}
 
@@ -48,7 +48,26 @@
       <div class="col">
         <article class="card cartao-produto h-100">
           {% if produto.imagem %}
-            <img class="cartao-produto__foto" src="{{ produto.imagem.url }}" alt="{{ produto.nome }}">
+            {% comment %}
+              Fotos extras (pacote 3.3): ficam escondidas e o fotos_do_catalogo.js as mostra uma
+              a uma com o mouse sobre o cartão. Sem JavaScript, sem hover ou sem extras, só a
+              principal aparece.
+            {% endcomment %}
+            {% with extras=produto.fotos.all %}
+            <div class="cartao-produto__fotos"{% if extras %} data-fotos-do-produto{% endif %}>
+              <img class="cartao-produto__foto" src="{{ produto.imagem.url }}" alt="{{ produto.nome }}">
+              {% for foto in extras %}
+                <img class="cartao-produto__foto" src="{{ foto.imagem.url }}" alt="{{ produto.nome }}"
+                     loading="lazy" hidden>
+              {% endfor %}
+              {% if extras %}
+                <div class="cartao-produto__pontos" aria-hidden="true">
+                  <span class="cartao-produto__ponto ativo"></span>
+                  {% for foto in extras %}<span class="cartao-produto__ponto"></span>{% endfor %}
+                </div>
+              {% endif %}
+            </div>
+            {% endwith %}
           {% else %}
             {% include "loja/_sem_foto.html" with classe="cartao-produto__foto" %}
           {% endif %}
@@ -87,4 +106,8 @@
     </div>
   </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/fotos_do_catalogo.js' %}"></script>
 {% endblock %}

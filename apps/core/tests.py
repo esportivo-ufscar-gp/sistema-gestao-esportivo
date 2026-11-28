@@ -24,10 +24,11 @@ from apps.clientes.models import Cliente
 from config.ambiente import banco_da_url, banco_de_dados, enderecos_publicos, env_bool, env_list
 from apps.estoque.models import MovimentoEstoque, TipoDeMovimento
 from apps.estoque.services import produtos_em_alerta
-from apps.produtos.models import Categoria, Produto
+from apps.produtos.models import Categoria, FotoDoProduto, Produto
 from apps.vendas.models import CanalDeVenda, StatusDeVenda, Venda
 
 from .demonstracao import (
+    NOME_DA_FOTO_EXTRA,
     PASTA_DAS_IMAGENS,
     ErroDeDemonstracao,
     carregar_imagens,
@@ -583,32 +584,140 @@ class ImagensDaDemonstracaoTests(TestCase):
         self.assertContains(resposta, 'src="/media/produtos/100110.jpg"')
 
 
+class FotosExtrasDaDemonstracaoTests(TestCase):
+    """Pacote 3.3: <código>-N.jpg vira foto extra de ordem N - 1, sem duplicar a cada deploy."""
+
+    def setUp(self):
+        self.media = _usa_media_temporaria(self)
+
+        origem = tempfile.TemporaryDirectory()
+        self.addCleanup(origem.cleanup)
+        self.pasta = Path(origem.name)
+        for nome in ("100110.jpg", "100110-2.jpg", "100110-3.jpg", "100110-1.jpg", "999999-2.jpg", "E2E-01.jpg"):
+            _jpeg(self.pasta / nome)
+
+        categoria = Categoria.objects.create(nome="Corrida")
+        self.tenis = Produto.objects.create(
+            codigo="100110", nome="Tênis", preco=Decimal("10.00"), categoria=categoria
+        )
+        self.bola = Produto.objects.create(
+            codigo="E2E-01", nome="Bola E2E", preco=Decimal("50.00"), categoria=categoria
+        )
+
+    def fotos_do_tenis(self):
+        return list(self.tenis.fotos.values_list("imagem", "ordem"))
+
+    def test_liga_as_extras_na_ordem_do_numero_do_arquivo(self):
+        resultado = carregar_imagens(self.pasta)
+
+        self.assertEqual(self.fotos_do_tenis(), [("produtos/100110-2.jpg", 1), ("produtos/100110-3.jpg", 2)])
+        self.assertEqual(resultado.extras, ["100110-2", "100110-3"])
+        self.assertEqual(
+            (self.media / "produtos" / "100110-2.jpg").read_bytes(),
+            (self.pasta / "100110-2.jpg").read_bytes(),
+        )
+
+    def test_rodar_de_novo_nao_duplica_as_extras_nem_os_arquivos(self):
+        carregar_imagens(self.pasta)
+        carregar_imagens(self.pasta)
+
+        self.assertEqual(FotoDoProduto.objects.count(), 2)
+        self.assertEqual(self.fotos_do_tenis(), [("produtos/100110-2.jpg", 1), ("produtos/100110-3.jpg", 2)])
+        self.assertEqual(
+            sorted(p.name for p in (self.media / "produtos").iterdir()),
+            ["100110-2.jpg", "100110-3.jpg", "100110.jpg", "E2E-01.jpg"],
+        )
+
+    def test_disco_recriado_recebe_as_extras_de_novo_sem_duplicar(self):
+        carregar_imagens(self.pasta)
+        (self.media / "produtos" / "100110-2.jpg").unlink()
+
+        carregar_imagens(self.pasta)
+
+        self.assertTrue((self.media / "produtos" / "100110-2.jpg").exists())
+        self.assertEqual(FotoDoProduto.objects.count(), 2)
+
+    def test_codigo_com_hifen_e_foto_principal_e_nao_extra(self):
+        carregar_imagens(self.pasta)
+
+        self.bola.refresh_from_db()
+        self.assertEqual(self.bola.imagem.name, "produtos/E2E-01.jpg")
+        self.assertFalse(self.bola.fotos.exists())
+
+    def test_extra_sem_produto_ou_com_numero_1_e_ignorada(self):
+        resultado = carregar_imagens(self.pasta)
+
+        self.assertEqual(resultado.sem_produto, ["100110-1", "999999-2"])
+        self.assertFalse(FotoDoProduto.objects.filter(imagem="produtos/100110-1.jpg").exists())
+
+    def test_nao_mexe_nas_extras_cadastradas_pelo_admin(self):
+        do_admin = FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/minha.jpg", ordem=5)
+
+        carregar_imagens(self.pasta)
+
+        do_admin.refresh_from_db()
+        self.assertEqual(do_admin.ordem, 5)
+        self.assertEqual(self.tenis.fotos.count(), 3)
+
+    def test_comando_mostra_quantas_extras_ligou(self):
+        saida = StringIO()
+        with mock.patch(COMANDO_DAS_IMAGENS, side_effect=lambda: carregar_imagens(self.pasta)):
+            call_command("carregar_imagens_demonstracao", stdout=saida)
+
+        self.assertIn("Fotos ligadas aos produtos: 2.", saida.getvalue())
+        self.assertIn("Fotos extras ligadas: 2.", saida.getvalue())
+
+    def test_catalogo_entrega_as_extras(self):
+        carregar_imagens(self.pasta)
+
+        resposta = self.client.get(reverse("loja:catalogo"))
+
+        self.assertContains(resposta, 'src="/media/produtos/100110-2.jpg"')
+        self.assertContains(resposta, 'src="/media/produtos/100110-3.jpg"')
+
+
 class PastaDeImagensTests(SimpleTestCase):
-    """As fotos versionadas: uma por produto do catálogo de exemplo, leves e com a origem anotada."""
+    """As fotos versionadas: uma principal por produto, extras numeradas, quadradas, leves e com crédito."""
 
     def codigos_da_fixture(self):
         caminho = Path(apps.get_app_config("produtos").path) / "fixtures" / "dados_exemplo.json"
         registros = json.loads(caminho.read_text(encoding="utf-8"))
         return sorted(r["fields"]["codigo"] for r in registros if r["model"] == "produtos.produto")
 
-    def test_uma_foto_por_produto_do_catalogo(self):
-        fotos = sorted(p.stem for p in PASTA_DAS_IMAGENS.glob("*.jpg"))
+    def nomes_das_fotos(self):
+        return sorted(p.stem for p in PASTA_DAS_IMAGENS.glob("*.jpg"))
 
-        self.assertEqual(fotos, self.codigos_da_fixture())
+    def test_uma_foto_principal_por_produto_do_catalogo(self):
+        principais = [nome for nome in self.nomes_das_fotos() if not NOME_DA_FOTO_EXTRA.match(nome)]
 
-    def test_fotos_sao_jpeg_leves_na_proporcao_dos_cartoes(self):
+        self.assertEqual(principais, self.codigos_da_fixture())
+
+    def test_fotos_extras_sao_de_produtos_do_catalogo_numeradas_a_partir_de_2(self):
+        codigos = self.codigos_da_fixture()
+        extras = [NOME_DA_FOTO_EXTRA.match(nome) for nome in self.nomes_das_fotos()]
+
+        for extra in filter(None, extras):
+            with self.subTest(foto=extra.string):
+                self.assertIn(extra["codigo"], codigos)
+                self.assertGreaterEqual(int(extra["numero"]), 2)
+
+    def test_fotos_sao_jpeg_quadrados_de_1200_e_leves(self):
         for foto in PASTA_DAS_IMAGENS.glob("*.jpg"):
             with self.subTest(foto=foto.name), Image.open(foto) as imagem:
                 self.assertEqual(imagem.format, "JPEG")
-                self.assertEqual(imagem.size, (800, 500))
+                self.assertEqual(imagem.size, (1200, 1200))
                 self.assertLess(foto.stat().st_size, 200 * 1024)
 
-    def test_creditos_registram_a_origem_de_cada_foto(self):
+    def test_creditos_registram_autor_e_origem_de_cada_foto(self):
         creditos = (PASTA_DAS_IMAGENS / "CREDITOS.md").read_text(encoding="utf-8")
 
-        for codigo in self.codigos_da_fixture():
-            with self.subTest(codigo=codigo):
-                self.assertRegex(creditos, rf"{codigo}\.jpg \|.*\| https://www\.pexels\.com/photo/\d+/")
+        for nome in self.nomes_das_fotos():
+            with self.subTest(foto=nome):
+                self.assertRegex(
+                    creditos,
+                    rf"\| {re.escape(nome)}\.jpg \| [^|]+ \| "
+                    r"https://(unsplash\.com/photos/|www\.pexels\.com/photo/)[\w-]+/? \| Licença",
+                )
 
 
 class MediaTests(TestCase):

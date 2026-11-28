@@ -8,13 +8,16 @@ Cada critério de aceite tem pelo menos um teste. Os saldos dos produtos de test
 direto na criação; quando um teste precisa que o saldo caia "porque alguém comprou antes",
 ele usa o serviço de estoque ou o PDV, como a venda faria.
 """
+import re
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import Group, User
 from django.contrib.sessions.backends.db import SessionStore
 from django.core.management import call_command
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -23,7 +26,7 @@ from apps.clientes.services import cadastrar_cliente
 from apps.contas.services import PERFIL_ADMINISTRADOR, PERFIL_CLIENTE, PERFIL_ESTOQUISTA, PERFIL_VENDEDOR
 from apps.estoque.models import MovimentoEstoque
 from apps.estoque.services import registrar_ajuste
-from apps.produtos.models import Categoria, Produto
+from apps.produtos.models import Categoria, FotoDoProduto, Produto
 from apps.vendas.carrinho import CHAVE_NA_SESSAO as CHAVE_DO_PDV
 from apps.vendas.models import CanalDeVenda, ContadorDeVendas, FormaDePagamento, StatusDeVenda, Venda
 from apps.vendas.services import cancelar_venda, marcar_retirado, registrar_pedido_online, registrar_venda_pdv
@@ -213,6 +216,76 @@ class CatalogoTests(BaseDaLoja):
 
         self.assertContains(resposta, "Adicionar ao carrinho")
         self.assertContains(resposta, f'name="produto" value="{self.tenis.pk}"')
+
+
+class FotosDoCartaoTests(BaseDaLoja):
+    """Pacote 3.3: o cartão entrega a foto principal e as extras para a troca com o mouse."""
+
+    def setUp(self):
+        Produto.objects.filter(pk=self.tenis.pk).update(imagem="produtos/100110.jpg")
+        Produto.objects.filter(pk=self.chuteira.pk).update(imagem="produtos/100120.jpg")
+        # Criadas fora de ordem: o catálogo tem de seguir o campo ordem, não a criação.
+        FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/100110-3.jpg", ordem=2)
+        FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/100110-2.jpg", ordem=1)
+
+    def cartao(self, produto):
+        """HTML do cartão do produto na vitrine."""
+        html = self.client.get(reverse("loja:catalogo")).content.decode()
+        cartoes = html.split('<article class="card cartao-produto')[1:]
+        return next(cartao for cartao in cartoes if produto.nome in cartao)
+
+    def test_cartao_entrega_as_fotos_extras_na_ordem(self):
+        cartao = self.cartao(self.tenis)
+
+        fotos = re.findall(r'src="/media/(produtos/[^"]+)"', cartao)
+        self.assertEqual(fotos, ["produtos/100110.jpg", "produtos/100110-2.jpg", "produtos/100110-3.jpg"])
+        self.assertIn("data-fotos-do-produto", cartao)
+
+    def test_extras_ficam_escondidas_com_carregamento_tardio_e_o_mesmo_alt(self):
+        cartao = self.cartao(self.tenis)
+
+        self.assertEqual(cartao.count('loading="lazy"'), 2)
+        self.assertEqual(len(re.findall(r'loading="lazy"\s+hidden', cartao)), 2)
+        self.assertEqual(cartao.count(f'alt="{self.tenis.nome}"'), 3)
+
+    def test_um_ponto_por_foto_com_a_principal_marcada(self):
+        cartao = self.cartao(self.tenis)
+
+        pontos = re.findall(r'class="cartao-produto__ponto( ativo)?"', cartao)
+        self.assertEqual(pontos, [" ativo", "", ""])
+
+    def test_produto_sem_extras_mostra_so_a_principal(self):
+        cartao = self.cartao(self.chuteira)
+
+        self.assertEqual(cartao.count("<img"), 1)
+        self.assertNotIn("data-fotos-do-produto", cartao)
+        self.assertNotIn("cartao-produto__ponto", cartao)
+
+    def test_extras_sem_foto_principal_mostram_o_espaco_reservado(self):
+        FotoDoProduto.objects.create(produto=self.relogio, imagem="produtos/100140-2.jpg")
+
+        cartao = self.cartao(self.relogio)
+
+        self.assertIn("Foto do produto", cartao)
+        self.assertNotIn("<img", cartao)
+
+    def test_catalogo_carrega_o_script_da_troca_de_fotos(self):
+        resposta = self.client.get(reverse("loja:catalogo"))
+
+        self.assertContains(resposta, "js/fotos_do_catalogo.js")
+
+    def test_fotos_extras_nao_geram_uma_consulta_por_produto(self):
+        def consultas_do_catalogo():
+            with CaptureQueriesContext(connection) as consultas:
+                self.client.get(reverse("loja:catalogo"))
+            return len(consultas)
+
+        antes = consultas_do_catalogo()
+        Produto.objects.filter(pk=self.relogio.pk).update(imagem="produtos/100140.jpg")
+        FotoDoProduto.objects.create(produto=self.chuteira, imagem="produtos/100120-2.jpg")
+        FotoDoProduto.objects.create(produto=self.relogio, imagem="produtos/100140-2.jpg")
+
+        self.assertEqual(consultas_do_catalogo(), antes)
 
 
 class DisponibilidadeTests(BaseDaLoja):

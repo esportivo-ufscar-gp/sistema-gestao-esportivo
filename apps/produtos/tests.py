@@ -21,8 +21,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 
-from .admin import CategoriaAdmin, ProdutoAdmin
-from .models import Categoria, Produto
+from .admin import CategoriaAdmin, FotoDoProdutoInline, ProdutoAdmin
+from .models import Categoria, FotoDoProduto, Produto
 
 
 def cria_produto(categoria, codigo="100110", **campos):
@@ -339,12 +339,137 @@ class ProdutoAdminTests(TestCase):
             "preco": "359.90",
             "estoque_atual": "999",   # ignorado: o campo é somente leitura
             "estoque_minimo": "4",
+            # Controle do inline de fotos extras (pacote 3.3), que o navegador sempre envia.
+            "fotos-TOTAL_FORMS": "0",
+            "fotos-INITIAL_FORMS": "0",
+            "fotos-MIN_NUM_FORMS": "0",
+            "fotos-MAX_NUM_FORMS": "1000",
         })
         self.tenis.refresh_from_db()
 
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(self.tenis.preco, Decimal("359.90"))
         self.assertEqual(self.tenis.estoque_atual, 12)
+
+
+# ------------------------------------------------------------ Fotos extras (pacote 3.3)
+class FotoDoProdutoTests(TestCase):
+    """As fotos extras pertencem ao produto e saem na ordem do campo ordem."""
+
+    def setUp(self):
+        self.tenis = cria_produto(Categoria.objects.create(nome="Corrida"))
+
+    def test_fotos_saem_pela_ordem_e_no_empate_pela_criacao(self):
+        segunda = FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/b.jpg", ordem=2)
+        primeira = FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/a.jpg", ordem=1)
+        empatada = FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/c.jpg", ordem=2)
+
+        self.assertEqual(list(self.tenis.fotos.all()), [primeira, segunda, empatada])
+
+    def test_nomes_em_portugues_e_pasta_produtos(self):
+        meta = FotoDoProduto._meta
+
+        self.assertEqual(meta.verbose_name, "foto do produto")
+        self.assertEqual(meta.verbose_name_plural, "fotos do produto")
+        self.assertEqual(meta.get_field("produto").verbose_name, "produto")
+        self.assertEqual(meta.get_field("imagem").verbose_name, "imagem")
+        self.assertEqual(meta.get_field("ordem").verbose_name, "ordem")
+        self.assertEqual(meta.get_field("imagem").upload_to, "produtos/")
+
+    def test_imagem_e_obrigatoria(self):
+        with self.assertRaises(ValidationError):
+            FotoDoProduto(produto=self.tenis, ordem=1).full_clean()
+
+    def test_ordem_negativa_e_recusada_no_python_e_no_banco(self):
+        with self.assertRaises(ValidationError):
+            FotoDoProduto(produto=self.tenis, imagem="produtos/a.jpg", ordem=-1).full_clean()
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/a.jpg", ordem=-1)
+
+    def test_excluir_produto_sem_historico_leva_as_fotos(self):
+        FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/a.jpg")
+
+        self.tenis.delete()
+
+        self.assertFalse(FotoDoProduto.objects.exists())
+
+    def test_texto_da_foto(self):
+        foto = FotoDoProduto(produto=self.tenis, imagem="produtos/a.jpg", ordem=2)
+
+        self.assertEqual(str(foto), "Foto 2 de 100110 - Tênis de corrida amortecido")
+
+
+class FotosExtrasNoAdminTests(TestCase):
+    """As fotos extras são cadastradas, ordenadas e removidas na própria tela do produto."""
+
+    def setUp(self):
+        pasta = tempfile.TemporaryDirectory()
+        self.addCleanup(pasta.cleanup)
+        media = override_settings(MEDIA_ROOT=pasta.name)
+        media.enable()
+        self.addCleanup(media.disable)
+
+        self.corrida = Categoria.objects.create(nome="Corrida")
+        self.tenis = cria_produto(self.corrida)
+        self.usuario = User.objects.create_superuser("gerente", "gerente@exemplo.com", "senha-de-teste-123")
+        self.client.force_login(self.usuario)
+        self.endereco = reverse("admin:produtos_produto_change", args=[self.tenis.pk])
+
+    def salva_o_produto(self, fotos, iniciais=0):
+        """Envia a tela do produto com as linhas de fotos extras informadas."""
+        dados = {
+            "codigo": self.tenis.codigo,
+            "nome": self.tenis.nome,
+            "categoria": self.corrida.pk,
+            "ativo": "on",
+            "descricao": "",
+            "preco": "349.90",
+            "estoque_minimo": "0",
+            "fotos-TOTAL_FORMS": str(len(fotos)),
+            "fotos-INITIAL_FORMS": str(iniciais),
+            "fotos-MIN_NUM_FORMS": "0",
+            "fotos-MAX_NUM_FORMS": "1000",
+        }
+        for indice, foto in enumerate(fotos):
+            dados.update({f"fotos-{indice}-{campo}": valor for campo, valor in foto.items()})
+            dados[f"fotos-{indice}-produto"] = self.tenis.pk
+        return self.client.post(self.endereco, dados)
+
+    def test_tela_do_produto_tem_o_inline_de_fotos(self):
+        self.assertEqual(ProdutoAdmin.inlines, (FotoDoProdutoInline,))
+        self.assertEqual(FotoDoProdutoInline.fields, ("imagem", "ordem"))
+
+        resposta = self.client.get(self.endereco)
+
+        self.assertContains(resposta, 'name="fotos-TOTAL_FORMS"')
+        self.assertContains(resposta, "Fotos extras (aparecem no catálogo depois da foto principal)")
+
+    def test_cadastra_foto_extra(self):
+        resposta = self.salva_o_produto([{"imagem": imagem_de_teste("lado.png"), "ordem": "1"}])
+
+        self.assertEqual(resposta.status_code, 302)
+        foto = self.tenis.fotos.get()
+        self.addCleanup(foto.imagem.close)
+        self.assertEqual(foto.ordem, 1)
+        self.assertTrue(foto.imagem.name.startswith("produtos/"))
+        self.assertTrue(foto.imagem.storage.exists(foto.imagem.name))
+
+    def test_reordena_e_remove_fotos_extras(self):
+        lado = FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/lado.jpg", ordem=1)
+        sola = FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/sola.jpg", ordem=2)
+        detalhe = FotoDoProduto.objects.create(produto=self.tenis, imagem="produtos/detalhe.jpg", ordem=3)
+
+        resposta = self.salva_o_produto(
+            [
+                {"id": lado.pk, "ordem": "3"},
+                {"id": sola.pk, "ordem": "2", "DELETE": "on"},
+                {"id": detalhe.pk, "ordem": "1"},
+            ],
+            iniciais=3,
+        )
+
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual(list(self.tenis.fotos.all()), [detalhe, lado])
 
 
 class CategoriaAdminTests(TestCase):

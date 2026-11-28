@@ -16,6 +16,7 @@ de --senha ou de DEMO_SENHA, ou gera uma aleatória). O repositório é público
 escrita aqui abriria o Admin do ambiente hospedado para qualquer pessoa.
 """
 import random
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -36,7 +37,7 @@ from apps.clientes.services import cadastrar_cliente
 from apps.contas.services import PERFIL_ADMINISTRADOR, PERFIL_ESTOQUISTA, PERFIL_VENDEDOR, criar_perfis
 from apps.estoque.models import TIPOS_DE_ENTRADA, MovimentoEstoque
 from apps.estoque.services import registrar_entrada
-from apps.produtos.models import Categoria, Produto
+from apps.produtos.models import Categoria, FotoDoProduto, Produto
 from apps.vendas.models import FormaDePagamento, Venda
 from apps.vendas.services import cancelar_venda, marcar_retirado, registrar_pedido_online, registrar_venda_pdv
 
@@ -287,52 +288,81 @@ def _saldo(produto):
 
 
 # ------------------------------------------------------------------ Fotos do catálogo
-# As fotos do catálogo de exemplo ficam versionadas nesta pasta, uma por produto, com o código
-# no nome (100110.jpg). A pasta media/ não vai para o repositório (CLAUDE.md), e no Render o
-# disco do site é recriado a cada deploy e a cada vez que ele acorda: por isso o build roda
-# carregar_imagens a cada deploy, gravando de novo os arquivos na media/.
+# As fotos do catálogo de exemplo ficam versionadas nesta pasta, com o código no nome: a
+# principal em <código>.jpg (100110.jpg) e as extras em <código>-2.jpg, <código>-3.jpg, na
+# ordem em que aparecem no catálogo. A pasta media/ não vai para o repositório (CLAUDE.md), e
+# no Render o disco do site é recriado a cada deploy e a cada vez que ele acorda: por isso o
+# build roda carregar_imagens a cada deploy, gravando de novo os arquivos na media/.
 PASTA_DAS_IMAGENS = Path(__file__).resolve().parent / "imagens_demonstracao"
+NOME_DA_FOTO_EXTRA = re.compile(r"^(?P<codigo>.+)-(?P<numero>\d+)$")
 
 
 @dataclass
 class ResultadoDasImagens:
-    ligadas: list = field(default_factory=list)       # códigos que receberam a foto da pasta
-    mantidas: list = field(default_factory=list)      # já tinham outra foto, que ainda existe
+    ligadas: list = field(default_factory=list)       # códigos que receberam a foto principal da pasta
+    mantidas: list = field(default_factory=list)      # já tinham outra foto principal, que ainda existe
+    extras: list = field(default_factory=list)        # fotos extras ligadas, pelo nome (100110-2)
     sem_produto: list = field(default_factory=list)   # fotos cujo código não está no catálogo
 
 
 def carregar_imagens(pasta=PASTA_DAS_IMAGENS):
     """
-    Grava cada foto da pasta em produtos/<código>.jpg e a liga ao produto do mesmo código.
+    Liga as fotos da pasta aos produtos do mesmo código.
 
-    Pode rodar quantas vezes for preciso: o arquivo é sobrescrito com o mesmo nome, sem criar
-    cópias. Uma foto que alguém trocou pelo Admin é mantida enquanto o arquivo dela existir;
-    se o arquivo sumiu (o disco do Render foi recriado), o produto volta a usar a foto da pasta,
-    em vez de mostrar uma imagem quebrada. Só o campo imagem é gravado: o saldo de estoque não
-    é tocado (ele só muda pelo serviço de estoque).
+    A principal (<código>.jpg) vai para produtos/<código>.jpg e para o campo Produto.imagem.
+    Cada extra (<código>-N.jpg, com N a partir de 2) vai para produtos/<código>-N.jpg e vira uma
+    FotoDoProduto de ordem N - 1.
+
+    Pode rodar quantas vezes for preciso: os arquivos são sobrescritos com o mesmo nome, e a
+    foto extra é achada pelo nome do arquivo, então nada é duplicado. Uma foto principal que
+    alguém trocou pelo Admin é mantida enquanto o arquivo dela existir; se o arquivo sumiu (o
+    disco do Render foi recriado), o produto volta a usar a foto da pasta, em vez de mostrar uma
+    imagem quebrada. Fotos extras cadastradas pelo Admin não são tocadas. Só as fotos são
+    gravadas: o saldo de estoque não muda (ele só muda pelo serviço de estoque).
     """
     resultado = ResultadoDasImagens()
-    campo = Produto._meta.get_field("imagem")
     arquivos = {arquivo.stem: arquivo for arquivo in sorted(Path(pasta).glob("*.jpg"))}
-    produtos = {produto.codigo: produto for produto in Produto.objects.filter(codigo__in=arquivos)}
+    # Um código de produto pode ter hífen (E2E-01): o nome inteiro é conferido antes do sufixo.
+    codigos = set(arquivos) | {extra["codigo"] for extra in map(NOME_DA_FOTO_EXTRA.match, arquivos) if extra}
+    produtos = {produto.codigo: produto for produto in Produto.objects.filter(codigo__in=codigos)}
 
-    for codigo, arquivo in arquivos.items():
-        produto = produtos.get(codigo)
-        if produto is None:
-            resultado.sem_produto.append(codigo)
+    for nome, arquivo in arquivos.items():
+        if nome in produtos:
+            _ligar_a_foto_principal(produtos[nome], arquivo, resultado)
             continue
 
-        nome = f"{campo.upload_to}{codigo}.jpg"
-        atual = produto.imagem.name
-        if atual and atual != nome and campo.storage.exists(atual):
-            resultado.mantidas.append(codigo)
-            continue
-
-        if campo.storage.exists(nome):
-            campo.storage.delete(nome)
-        with arquivo.open("rb") as conteudo:
-            salvo = campo.storage.save(nome, File(conteudo, name=arquivo.name))
-        Produto.objects.filter(pk=produto.pk).update(imagem=salvo)
-        resultado.ligadas.append(codigo)
+        extra = NOME_DA_FOTO_EXTRA.match(nome)
+        if extra and int(extra["numero"]) >= 2 and extra["codigo"] in produtos:
+            _ligar_a_foto_extra(produtos[extra["codigo"]], arquivo, ordem=int(extra["numero"]) - 1)
+            resultado.extras.append(nome)
+        else:
+            resultado.sem_produto.append(nome)
 
     return resultado
+
+
+def _ligar_a_foto_principal(produto, arquivo, resultado):
+    campo = Produto._meta.get_field("imagem")
+    nome = f"{campo.upload_to}{produto.codigo}.jpg"
+    atual = produto.imagem.name
+    if atual and atual != nome and campo.storage.exists(atual):
+        resultado.mantidas.append(produto.codigo)
+        return
+
+    salvo = _gravar_na_media(campo, nome, arquivo)
+    Produto.objects.filter(pk=produto.pk).update(imagem=salvo)
+    resultado.ligadas.append(produto.codigo)
+
+
+def _ligar_a_foto_extra(produto, arquivo, ordem):
+    campo = FotoDoProduto._meta.get_field("imagem")
+    salvo = _gravar_na_media(campo, f"{campo.upload_to}{arquivo.name}", arquivo)
+    FotoDoProduto.objects.update_or_create(produto=produto, imagem=salvo, defaults={"ordem": ordem})
+
+
+def _gravar_na_media(campo, nome, arquivo):
+    """Grava o arquivo com exatamente esse nome: apaga o anterior em vez de criar uma cópia."""
+    if campo.storage.exists(nome):
+        campo.storage.delete(nome)
+    with arquivo.open("rb") as conteudo:
+        return campo.storage.save(nome, File(conteudo, name=arquivo.name))

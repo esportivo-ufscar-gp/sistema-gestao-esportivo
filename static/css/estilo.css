@@ -165,11 +165,48 @@ body {
   overflow: hidden;
 }
 
+/* Foto quadrada e inteira (contain): nenhuma foto é cortada. O espaço reservado "Foto do produto"
+ * usa a mesma classe e fica com a mesma proporção, mas mantém o fundo cinza dele. */
 .cartao-produto__foto {
-  aspect-ratio: 16 / 10;
+  aspect-ratio: 1 / 1;
   max-width: 100%;
-  object-fit: cover;
+  object-fit: contain;
   width: 100%;
+}
+
+img.cartao-produto__foto {
+  background-color: #fff;
+}
+
+/* Fotos extras (pacote 3.3): os pontos só aparecem enquanto as fotos trocam (fotos_do_catalogo.js). */
+.cartao-produto__fotos {
+  position: relative;
+}
+
+.cartao-produto__pontos {
+  bottom: .6rem;
+  display: none;
+  gap: .35rem;
+  justify-content: center;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+.cartao-produto__fotos.trocando .cartao-produto__pontos {
+  display: flex;
+}
+
+.cartao-produto__ponto {
+  background-color: rgba(0, 0, 0, .2);
+  border-radius: 50%;
+  height: .45rem;
+  width: .45rem;
+}
+
+.cartao-produto__ponto.ativo {
+  background-color: var(--cor-cabecalho);
 }
 
 .sem-foto {
@@ -277,12 +314,18 @@ body {
   color: #fff;
 }
 
+/* Miniatura quadrada, como a foto do cartão: a foto aparece inteira, sobre fundo branco. */
 .item-carrinho__foto {
+  aspect-ratio: 1 / 1;
   border-radius: .25rem;
   flex: 0 0 auto;
   height: 5.5rem;
-  object-fit: cover;
+  object-fit: contain;
   width: 5.5rem;
+}
+
+img.item-carrinho__foto {
+  background-color: #fff;
 }
 
 .btn-quantidade {
