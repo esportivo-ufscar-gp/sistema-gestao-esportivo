@@ -358,6 +358,26 @@ class PdvTests(TestCase):
 
         self.assertRedirects(resposta, f"{reverse('contas:entrar')}?next={self.endereco}")
 
+    # ---------------------------------------------------------- formatos (RNF06)
+    def test_ultimas_vendas_mostram_a_data_com_o_ano_e_o_valor_com_milhar(self):
+        # Roteiro 5.1, CT-31: datas como dd/mm/aaaa e valores como R$ 1.234,56.
+        esteira = cria_produto("100900", "Esteira", preco="1234.56", saldo=2)
+        venda = registrar_venda_pdv(self.vendedor, [(esteira, 1)], FormaDePagamento.PIX)
+
+        resposta = self.client.get(self.endereco)
+
+        self.assertContains(resposta, timezone.localtime(venda.criado_em).strftime("%d/%m/%Y"))
+        self.assertContains(resposta, "R$ 1.234,56")
+        self.assertNotContains(resposta, "1234,56")
+
+    def test_mensagem_da_venda_finalizada_agrupa_os_milhares(self):
+        esteira = cria_produto("100900", "Esteira", preco="1234.56", saldo=2)
+        self.client.post(self.endereco, {"acao": "adicionar", "produto": esteira.pk})
+
+        resposta = self.client.post(self.endereco, {"acao": "finalizar", "forma_pagamento": "pix"}, follow=True)
+
+        self.assertContains(resposta, "no total de R$ 1.234,56.")
+
     # ---------------------------------------------------------- busca
     def test_busca_por_nome(self):
         resposta = self.client.get(self.endereco, {"busca": "camisa"})
