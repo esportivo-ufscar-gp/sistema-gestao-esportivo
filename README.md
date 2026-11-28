@@ -101,16 +101,24 @@ da demonstração já está em uso ou quando há produto com saldo sem movimento
 explique (por exemplo, depois de um `loaddata dados_exemplo`). Com `--se-vazio`, um banco que
 já tem vendas é deixado como está, sem erro: é assim que o deploy roda o comando.
 
-As fotos do catálogo de exemplo ficam em `apps/core/imagens_demonstracao/`, uma por produto, com o
-código no nome do arquivo (a origem e a licença de cada uma estão no `CREDITOS.md` da pasta). Para
-ligá-las aos produtos:
+As fotos do catálogo de exemplo ficam em `apps/core/imagens_demonstracao/`, com o código no nome
+do arquivo: `<código>.jpg` é a foto principal e `<código>-2.jpg`, `<código>-3.jpg` são fotos
+extras da mesma peça, de outro ângulo. Todas seguem o mesmo padrão (produto recortado sobre o
+mesmo fundo claro, 1200 x 1200); a origem, a licença e as alterações de cada uma estão no
+`CREDITOS.md` da pasta. Para ligá-las aos produtos:
 
 ```bash
 python manage.py carregar_imagens_demonstracao
 ```
 
-O comando grava cada foto em `media/produtos/<código>.jpg` e pode rodar quantas vezes for preciso.
-Uma foto trocada pelo Admin é mantida enquanto o arquivo dela existir.
+O comando grava cada foto em `media/produtos/` com o mesmo nome e pode rodar quantas vezes for
+preciso, sem duplicar as fotos extras. Uma foto principal trocada pelo Admin é mantida enquanto o
+arquivo dela existir.
+
+No catálogo, com o mouse sobre o cartão de um produto que tem fotos extras, as fotos passam a
+trocar a cada segundo, com pontos que mostram qual está aparecendo; quando o mouse sai, volta a
+principal. No celular (sem mouse) e com "reduzir movimento" ligado no sistema, aparece só a foto
+principal. As fotos extras são cadastradas, ordenadas e removidas no Admin, na tela do produto.
 
 ### Publicar no Render (pacote 3.3)
 
@@ -138,11 +146,12 @@ Limites do plano gratuito:
 - o site **dorme depois de 15 minutos** sem acesso e leva **cerca de 1 minuto** para acordar:
   abra-o um pouco antes de apresentar;
 - o banco gratuito **expira 30 dias depois de criado** e é apagado depois de mais 14 dias;
-- o disco do site é temporário: **imagens de produtos enviadas pelo Admin somem** quando o site
-  reinicia ou dorme. As fotos do catálogo de exemplo não somem, porque o build as grava a cada
-  deploy; um produto cuja foto enviada pelo Admin sumiu volta a mostrar a foto de exemplo (ou o
-  espaço reservado "Foto do produto", se não houver uma). Para trocar uma foto de vez, substitua
-  o arquivo na pasta `apps/core/imagens_demonstracao/` e faça o merge na `main`.
+- o disco do site é temporário: **imagens de produtos enviadas pelo Admin somem** (principais e
+  extras) quando o site reinicia ou dorme. As fotos do catálogo de exemplo não somem, porque o
+  build as grava a cada deploy; um produto cuja foto principal enviada pelo Admin sumiu volta a
+  mostrar a foto de exemplo (ou o espaço reservado "Foto do produto", se não houver uma), e uma
+  foto extra cujo arquivo sumiu é pulada na troca de fotos do catálogo. Para trocar uma foto de
+  vez, substitua o arquivo na pasta `apps/core/imagens_demonstracao/` e faça o merge na `main`.
 
 Se o deploy falhar, a aba **Logs** do serviço mostra a etapa do `build.sh` que deu erro.
 
